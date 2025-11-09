@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基金資料彙總報告產生器 (自動偵測版)</title>
+
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+    <style>
+        /* --- 整體頁面樣式 --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 2em;
+            background-color: #f4f7f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+        }
+        .container { max-width: 1200px; width: 100%; background: white; padding: 2.5em; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08); }
+        h1 { color: #1a2c4e; border-bottom: 3px solid #007bff; padding-bottom: 15px; margin-top: 0; }
+
+        /* --- 拖曳區域樣式 --- */
+        #drop-zone { border: 3px dashed #c0cdda; border-radius: 10px; padding: 50px; text-align: center; color: #8a9bb3; font-size: 1.3em; cursor: pointer; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); margin-bottom: 2em; background-color: #fcfdff; }
+        #drop-zone.drag-over { border-color: #007bff; background-color: #e6f2ff; color: #0056b3; transform: scale(1.02); }
+        #drop-zone p { margin: 0; font-size: 1.5rem; font-weight: 500;}
+        #drop-zone span { font-size: 1rem; }
+
+        /* --- 控制項樣式 --- */
+        .controls { margin-bottom: 2em; padding: 1.5em; background-color: #f8f9fa; border-radius: 8px; display: flex; flex-direction: column; gap: 20px; }
+        .control-row { display: flex; align-items: center; flex-wrap: wrap; gap: 25px; }
+        .control-group { display: flex; align-items: center; gap: 10px; }
+        label { font-size: 1.1em; font-weight: 500; }
+        select, button, input[type="text"] { padding: 12px 18px; font-size: 1em; border-radius: 6px; border: 1px solid #ced4da; transition: all 0.2s ease-in-out; }
+        select { cursor: pointer; }
+        input[type="text"] { flex-grow: 1; min-width: 100px; }
+        select:focus, button:focus, input[type="text"]:focus { outline: none; border-color: #80bdff; box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); }
+        button { background-color: #28a745; color: white; border-color: #28a745; font-weight: 500; cursor: pointer; }
+        #download-json-btn { background-color: #007bff; border-color: #007bff; }
+        #process-btn { background-color: #fd7e14; border-color: #fd7e14; } /* 新增的按鈕樣式 */
+        button:hover:not(:disabled) { opacity: 0.85; }
+        button:disabled { background-color: #c0cdda; border-color: #c0cdda; cursor: not-allowed; }
+
+        /* --- 模式切換樣式 --- */
+        .mode-selector { display: flex; background-color: #e9ecef; border-radius: 6px; padding: 5px; }
+        .mode-selector input[type="radio"] { display: none; }
+        .mode-selector label { padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: all 0.3s ease; }
+        .mode-selector input[type="radio"]:checked + label { background-color: #007bff; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+
+        /* --- 狀態和表格樣式 --- */
+        #status { margin-bottom: 1.5em; color: #555; font-weight: bold; height: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1em; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e9ecef; padding: 14px 18px; text-align: left; vertical-align: middle; }
+        thead { background-color: #007bff; color: white; }
+        tbody tr:nth-child(even) { background-color: #f8f9fa; }
+        tbody tr:hover { background-color: #e9ecef; }
+        /* 右對齊數字欄位 */
+        td:not(:first-child) { text-align: right; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>基金資料彙總報告產生器 (自動偵測版)</h1>
+        
+        <input type="file" id="file-input" multiple accept=".xlsx, .xls" style="display: none;">
+        <div id="drop-zone">
+            <p>拖曳 Excel 檔案至此</p>
+            <span>或點擊此處選擇檔案</span>
+        </div>
+
+        <div class="controls">
+            <div class="control-row">
+                <div class="control-group">
+                    <label>檢視模式：</label>
+                    <div class="mode-selector">
+                        <input type="radio" id="mode-individual" name="view-mode" value="individual" checked>
+                        <label for="mode-individual">個別基金摘要</label>
+                        <input type="radio" id="mode-sum" name="view-mode" value="sum">
+                        <label for="mode-sum">所有基金加總</label>
+                        <input type="radio" id="mode-compare" name="view-mode" value="compare">
+                        <label for="mode-compare">單項比較</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <div class="control-group" style="flex-grow: 1;">
+                    <label for="range-input">偵測範圍：</label>
+                    <input type="text" id="range-input" placeholder="請先上傳檔案以自動偵測" disabled>
+                </div>
+                 <button id="process-btn" disabled>確認範圍並處理</button>
+            </div>
+            <hr style="border: none; border-top: 1px solid #e0e0e0; width: 100%; margin: 0;">
+
+            <div class="control-row">
+                <div class="control-group" id="fund-select-group">
+                    <label for="fund-select">選擇基金：</label>
+                    <select id="fund-select" disabled></select>
+                </div>
+                <div class="control-group" id="item-select-group" style="display: none;">
+                    <label for="item-select">選擇項目：</label>
+                    <select id="item-select" disabled></select>
+                </div>
+                 <button id="download-html-btn" disabled>產生並下載HTML報告</button>
+                 <button id="download-json-btn" disabled>匯出JSON檔</button>
+            </div>
+        </div>
+        
+        <div id="status"></div>
+        <div id="table-container"></div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM 元素 ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fundSelect = document.getElementById('fund-select');
+        const itemSelect = document.getElementById('item-select');
+        const tableContainer = document.getElementById('table-container');
+        const statusDiv = document.getElementById('status');
+        const downloadHtmlBtn = document.getElementById('download-html-btn');
+        const downloadJsonBtn = document.getElementById('download-json-btn');
+        const modeRadios = document.querySelectorAll('input[name="view-mode"]');
+        const fundSelectGroup = document.getElementById('fund-select-group');
+        const itemSelectGroup = document.getElementById('item-select-group');
+
+        // --- 新增的 DOM 元素 ---
+        const rangeInput = document.getElementById('range-input');
+        const processBtn = document.getElementById('process-btn');
+
+        // --- 全域變數與固定設定 ---
+        let allData = []; 
+        let fundNames = [];
+        let itemNames = [];
+        let uploadedFiles = null; // 暫存上傳的檔案
+        let detectedConfig = null; // 暫存偵測到的設定
+
+        // --- *** 修改點 (2) *** ---
+        // 這些變數不再是 "常數" (const)，
+        // 它們將在使用者點擊 "確認範圍" 按鈕後被動態填入。
+        let FIXED_HEADERS = [];
+        let ROWS_PER_FILE = 0; 
+        
+        // --- 設定事件監聽 ---
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => dropZone.addEventListener(eventName, preventDefaults, false));
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+        ['dragenter', 'dragover'].forEach(eventName => dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'), false));
+        ['dragleave', 'drop'].forEach(eventName => dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'), false));
+        dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+        
+        fundSelect.addEventListener('change', refreshTable);
+        itemSelect.addEventListener('change', refreshTable);
+        modeRadios.forEach(radio => radio.addEventListener('change', refreshTable));
+        downloadHtmlBtn.addEventListener('click', generateAndDownloadHtml);
+        downloadJsonBtn.addEventListener('click', generateAndDownloadJson);
+
+        // --- 新增的事件監聽 ---
+        processBtn.addEventListener('click', startProcessing);
+
+        // --- 主要功能函式 ---
+
+        /**
+         * *** 修改點 (3) ***
+         * `handleFiles` 現在只處理第一個檔案，用於偵測範圍。
+         * 真正的資料處理將移至 `startProcessing` 函式。
+         */
+        function handleFiles(files) {
+            if (!files || files.length === 0) return;
+            
+            // 儲存檔案列表以供稍後處理
+            uploadedFiles = files;
+            
+            // 重置 UI，但保留檔案列表
+            resetUI(false); 
+            statusDiv.textContent = `偵測中... 正在分析第一個檔案：${files[0].name}`;
+
+            const firstFile = files[0];
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    const workbook = XLSX.read(e.target.result, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const mainSheet = workbook.Sheets[firstSheetName];
+
+                    // *** 呼叫新的偵測函式 ***
+                    const result = findDataRange(mainSheet);
+                    
+                    // 儲存偵測結果
+                    detectedConfig = {
+                        headers: result.headers,
+                        rowsPerFile: result.rowsPerFile
+                    };
+                    
+                    // 更新 UI
+                    rangeInput.value = result.range;
+                    rangeInput.disabled = false;
+                    processBtn.disabled = false;
+                    statusDiv.textContent = `偵測完成！範圍為 ${result.range}。請確認範圍後點擊處理。`;
+
+                } catch (err) {
+                    statusDiv.textContent = `偵測失敗：${err.message}`;
+                    console.error(err);
+                    resetUI(true); // 徹底重置
+                }
+            };
+            reader.onerror = () => {
+                statusDiv.textContent = `讀取 ${firstFile.name} 失敗`;
+                resetUI(true);
+            };
+            reader.readAsArrayBuffer(firstFile);
+        }
+
+        /**
+         * *** 新函式 (A) ***
+         * 核心的資料範圍偵測邏輯
+         * @param {object} sheet - SheetJS 的工作表物件
+         * @returns {object} - { range: string, headers: string[], rowsPerFile: number }
+         */
+        function findDataRange(sheet) {
+            // 關鍵錨點，我們假設資料一定從 "項目" 開始
+            const ANCHOR_HEADER = "項目"; 
+            
+            // 將整個工作表轉為二維陣列
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+            let headerRowIndex = -1; // 標頭列的索引 (0-based)
+            let startColIndex = -1;  // "項目" 欄位的索引 (0-based)
+
+            // 1. 尋找標頭列 (包含 "項目" 的那-列)
+            for (let i = 0; i < rows.length; i++) {
+                if (!rows[i]) continue;
+                const colIndex = rows[i].indexOf(ANCHOR_HEADER);
+                if (colIndex !== -1) {
+                    headerRowIndex = i;
+                    startColIndex = colIndex;
+                    break;
+                }
+            }
+
+            if (headerRowIndex === -1) {
+                throw new Error("在工作表中找不到 '項目' 標頭欄。");
+            }
+
+            // 2. 取得完整的標頭陣列 (假設固定 9 欄)
+            //    我們也必須處理標頭欄位前後可能的多餘空白
+            const headers = rows[headerRowIndex]
+                .slice(startColIndex, startColIndex + 9)
+                .map(h => h ? String(h).trim() : null);
+            
+            if (headers.length < 9 || headers.includes(null)) {
+                 console.warn("偵測到的標頭不完整 (少於9欄或包含空值)", headers);
+            }
+
+            // 3. 尋找資料結束列
+            let endDataRowIndex = headerRowIndex; // 最後一筆資料的列索引
+            for (let i = headerRowIndex + 1; i < rows.length; i++) {
+                const row = rows[i];
+                // 如果該列為空，或 "項目" 欄位為空值，即為資料結尾
+                if (!row || row[startColIndex] == null || String(row[startColIndex]).trim() === "") {
+                    break;
+                }
+                endDataRowIndex = i;
+            }
+
+            if (endDataRowIndex === headerRowIndex) {
+                throw new Error("在 '項目' 標頭下找不到任何資料列。");
+            }
+
+            // 4. 計算範圍
+            const rowsPerFile = endDataRowIndex - headerRowIndex; // 資料行數 (不含標頭)
+            const startRow = headerRowIndex + 2; // 資料起始列 (Excel 1-based)
+            const endRow = endDataRowIndex + 1;   // 資料結束列 (Excel 1-based)
+            
+            const startColLetter = XLSX.utils.encode_col(startColIndex);
+            const endColLetter = XLSX.utils.encode_col(startColIndex + 8); // 9 欄
+
+            const rangeString = `${startColLetter}${startRow}:${endColLetter}${endRow}`;
+
+            return {
+                range: rangeString,
+                headers: headers,
+                rowsPerFile: rowsPerFile
+            };
+        }
+
+
+        /**
+         * *** 新函式 (B) ***
+         * 當使用者點擊 "確認範圍並處理" 時觸發
+         */
+        function startProcessing() {
+            if (!uploadedFiles || uploadedFiles.length === 0) {
+                alert("沒有偵測到檔案。");
+                return;
+            }
+            
+            // 1. 從輸入框獲取最終的資料範圍
+            const dataRange = rangeInput.value;
+            if (!dataRange) {
+                alert("資料範圍不能為空。");
+                return;
+            }
+
+            // 2. 設定全域變數 (!!! 關鍵步驟 !!!)
+            //    現在，所有舊的函式 (processFile, displayAggregatedTable) 都能正常運作了
+            FIXED_HEADERS = detectedConfig.headers;
+            ROWS_PER_FILE = detectedConfig.rowsPerFile;
+
+            // 3. 重置資料陣列並開始處理
+            resetUI(false); 
+            statusDiv.textContent = `處理中... 已選擇 ${uploadedFiles.length} 個檔案。`;
+            
+            const filePromises = Array.from(uploadedFiles).map(file => processFile(file, dataRange));
+
+            Promise.all(filePromises)
+                .then(() => {
+                    fundNames.sort();
+                    itemNames.sort(); // 確保項目名稱也排序
+                    statusDiv.textContent = `處理完成！共 ${fundNames.length} 個基金。`;
+                    populateDropdowns();
+                    if (allData.length > 0) {
+                        refreshTable();
+                        downloadHtmlBtn.disabled = false;
+                        downloadJsonBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    statusDiv.textContent = `處理檔案時發生錯誤：${error.message}`;
+                    console.error(error);
+                });
+        }
+
+
+        function resetUI(fullReset = true) {
+            allData = [];
+            fundNames = [];
+            itemNames = [];
+            [fundSelect, itemSelect, downloadHtmlBtn, downloadJsonBtn].forEach(el => el.disabled = true);
+            tableContainer.innerHTML = '';
+            
+            if (fullReset) {
+                uploadedFiles = null;
+                detectedConfig = null;
+                rangeInput.value = '';
+                rangeInput.disabled = true;
+                processBtn.disabled = true;
+                fileInput.value = ''; // 清除已選擇的檔案
+            }
+        }
+
+        /**
+         * *** 修改點 (4) ***
+         * 此函式幾乎不變，因為它依賴的全域變數 `FIXED_HEADERS`
+         * 已經在 `startProcessing` 中被正確設定了。
+         */
+        function processFile(file, dataRange) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const workbook = XLSX.read(e.target.result, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const mainSheet = workbook.Sheets[firstSheetName];
+                        
+                        const fileNamePrefix = file.name.split('-')[0];
+                        let fundNameFromCell = XLSX.utils.sheet_to_json(mainSheet, { header: 1, defval: null })[1]?.[0] || `未知基金`;
+                        fundNameFromCell = fundNameFromCell.replace("基金名稱：", "").trim();
+                        const fundName = `${fileNamePrefix}-${fundNameFromCell}`;
+
+                        if (!fundNames.includes(fundName)) fundNames.push(fundName);
+
+                        // 這裡使用傳入的 dataRange
+                        const rows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: dataRange, defval: null });
+
+                        const records = rows.map(rowArray => {
+                            const record = { '基金名稱': fundName };
+                            // 這裡使用動態設定的 FIXED_HEADERS
+                            FIXED_HEADERS.forEach((header, index) => {
+                                record[header] = rowArray[index];
+                            });
+                            const itemName = record[FIXED_HEADERS[0]];
+                            if (itemName && !itemNames.includes(itemName)) {
+                                itemNames.push(itemName);
+                            }
+                            return record;
+                        });
+                        
+                        allData.push(...records);
+                        resolve();
+                    } catch (err) {
+                        reject(new Error(`解析 ${file.name} 失敗: ${err.message}`));
+                    }
+                };
+                reader.onerror = () => reject(new Error(`讀取 ${file.name} 失敗`));
+                reader.readAsArrayBuffer(file);
+            });
+        }
+        
+        function populateDropdowns() {
+            const populate = (selectEl, options) => {
+                const currentVal = selectEl.value;
+                selectEl.innerHTML = '';
+                if (options.length === 0) {
+                    selectEl.innerHTML = '<option>無可用選項</option>';
+                    selectEl.disabled = true;
+                    return;
+                }
+                options.forEach(name => {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    option.textContent = name;
+                    selectEl.appendChild(option);
+                });
+                selectEl.value = currentVal;
+                if(selectEl.selectedIndex === -1) selectEl.selectedIndex = 0;
+                selectEl.disabled = false;
+            };
+
+            populate(fundSelect, fundNames);
+            populate(itemSelect, itemNames);
+        }
+
+        function refreshTable() {
+            const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
+            if (allData.length === 0) return;
+
+            fundSelectGroup.style.display = selectedMode === 'individual' ? 'flex' : 'none';
+            itemSelectGroup.style.display = selectedMode === 'compare' ? 'flex' : 'none';
+            
+            tableContainer.innerHTML = '';
+            switch (selectedMode) {
+                case 'individual':
+                    displayIndividualFundTable(fundSelect.value);
+                    break;
+                case 'sum':
+                    displayAggregatedTable();
+                    break;
+                case 'compare':
+                    displayItemComparisonTable(itemSelect.value);
+                    break;
+            }
+        }
+
+        function displayIndividualFundTable(fundName) {
+            const records = allData.filter(r => r['基金名稱'] === fundName);
+            if (!records || records.length === 0) {
+                tableContainer.innerHTML = `<p>找不到基金「${fundName}」的資料。</p>`;
+                return;
+            }
+            // 使用動態設定的 FIXED_HEADERS
+            const table = createTable(FIXED_HEADERS);
+            const tbody = table.querySelector('tbody');
+            records.forEach(record => {
+                const row = document.createElement('tr');
+                FIXED_HEADERS.forEach(header => {
+                    const cell = document.createElement('td');
+                    cell.textContent = formatNumber(record[header]);
+                    row.appendChild(cell);
+                });
+                tbody.appendChild(row);
+            });
+            tableContainer.appendChild(table);
+        }
+
+        /**
+         * *** 修改點 (5) ***
+         * 此函式幾乎不變，因為它依賴的全域變數 `ROWS_PER_FILE` 和 `FIXED_HEADERS`
+         * 已經在 `startProcessing` 中被正確設定了。
+         */
+        function displayAggregatedTable() {
+            if (!allData || allData.length === 0) {
+                tableContainer.innerHTML = `<p>沒有可加總的資料。</p>`;
+                return;
+            }
+            
+            const summaryData = [];
+            // 使用動態設定的 ROWS_PER_FILE
+            for (let i = 0; i < ROWS_PER_FILE; i++) {
+                const summaryRow = {};
+                FIXED_HEADERS.forEach((header, headerIndex) => {
+                    if (headerIndex === 0) {
+                        summaryRow[header] = allData[i]?.[header];
+                        return;
+                    }
+                    let sum = 0;
+                    fundNames.forEach((fund, fundIndex) => {
+                        const recordIndex = fundIndex * ROWS_PER_FILE + i;
+                        const value = allData[recordIndex]?.[header];
+                        if (typeof value === 'number' && !isNaN(value)) sum += value;
+                    });
+                    summaryRow[header] = sum;
+                });
+                summaryData.push(summaryRow);
+            }
+
+            const table = createTable(FIXED_HEADERS);
+            const tbody = table.querySelector('tbody');
+            summaryData.forEach(record => {
+                const row = document.createElement('tr');
+                FIXED_HEADERS.forEach(header => {
+                    const cell = document.createElement('td');
+                    cell.textContent = formatNumber(record[header]);
+                    row.appendChild(cell);
+                });
+                tbody.appendChild(row);
+            });
+            tableContainer.appendChild(table);
+        }
+
+        function displayItemComparisonTable(itemName) {
+            if (!allData || allData.length === 0 || !itemName) {
+                tableContainer.innerHTML = `<p>無法進行項目比較。</p>`;
+                return;
+            }
+            // 使用動態設定的 FIXED_HEADERS
+            const firstColumnHeader = FIXED_HEADERS[0];
+            const comparisonHeaders = ['基金名稱', ...FIXED_HEADERS.slice(1)];
+            const table = createTable(comparisonHeaders);
+            const tbody = table.querySelector('tbody');
+
+            fundNames.forEach(fund => {
+                const itemRowData = allData.find(r => r['基金名稱'] === fund && r[firstColumnHeader] === itemName);
+                const row = document.createElement('tr');
+                
+                let cell = document.createElement('td');
+                cell.textContent = fund;
+                row.appendChild(cell);
+
+                comparisonHeaders.slice(1).forEach(header => {
+                    cell = document.createElement('td');
+                    const value = itemRowData ? itemRowData[header] : '-';
+                    cell.textContent = formatNumber(value);
+                    row.appendChild(cell);
+                });
+                tbody.appendChild(row);
+            });
+            tableContainer.appendChild(table);
+        }
+
+        function createTable(headers) {
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+            const headerRow = document.createElement('tr');
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                th.textContent = headerText;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            table.appendChild(tbody);
+            return table;
+        }
+
+        function formatNumber(value) {
+            if (typeof value === 'number' && !isNaN(value)) {
+                return Math.round(value).toLocaleString('en-US');
+            }
+            return value != null ? value : '';
+        }
+        
+        function generateAndDownloadHtml() {
+            const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
+            let modeText = '';
+            let subTitle = ``;
+
+            switch (selectedMode) {
+                case 'individual':
+                    modeText = '個別基金摘要報告';
+                    subTitle = `基金：${fundSelect.value}`;
+                    break;
+                case 'sum':
+                    modeText = '所有基金加總報告';
+                    break;
+                case 'compare':
+                    modeText = '單項比較報告';
+                    subTitle = `比較項目：${itemSelect.value}`;
+                    break;
+            }
+            
+            const tableHtml = tableContainer.innerHTML;
+            if (!tableHtml || tableHtml.startsWith('<p>')) {
+                alert('沒有可匯出的資料！');
+                return;
+            }
+
+            const styles = document.querySelector('style').innerHTML;
+            const htmlContent = `
+                <!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>${modeText}</title><style>${styles}</style></head>
+                <body><div class="container"><h1>${modeText}</h1><h2>${subTitle}</h2>${tableHtml}</div></body></html>`;
+
+            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            const safeFilename = modeText.replace(/[\\/*?:"<>|]/g, '_');
+            link.download = `${safeFilename}.html`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+
+        function generateAndDownloadJson() {
+            if (allData.length === 0) {
+                alert('沒有可匯出的資料！');
+                return;
+            }
+            
+            // *** 修改點 (6) ***
+            // 確保 JSON 匯出也使用動態的標頭
+            const itemHeader = FIXED_HEADERS[0]; // "項目"
+            const currentYearHeader = FIXED_HEADERS[8]; // "行政院核列數"
+            const lastYearHeader = FIXED_HEADERS[2]; // "上年度預算"
+            const prevYearHeader = FIXED_HEADERS[1]; // "前年度決算"
+
+            const jsonData = allData.map(record => {
+                const fullName = record['基金名稱'];
+                const nameWithoutPrefix = fullName.substring(fullName.indexOf('-') + 1);
+
+                return {
+                    "基金名稱": nameWithoutPrefix,
+                    "科目": record[itemHeader],
+                    "本年度預算數": record[currentYearHeader],
+                    "上年度預算數": record[lastYearHeader],
+                    "前年度決算數": record[prevYearHeader]
+                };
+            });
+
+            const jsonString = JSON.stringify(jsonData, null, 2);
+
+            const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `基金資料匯出_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+    });
+    </script>
+</body>
+</html>
