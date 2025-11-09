@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v5 - 通用檔案名稱版)</title>
+    <title>基金資料彙總報告產生器 (v6 - 動態欄位通用版)</title>
 
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
     <style>
         /* --- (CSS 樣式保持不變) --- */
-        /* --- 整體頁面樣式 --- */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
@@ -63,7 +62,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>基金資料彙總報告產生器 (v5 - 通用檔案名稱版)</h1>
+        <h1>基金資料彙總報告產生器 (v6 - 動態欄位通用版)</h1>
         
         <input type="file" id="file-input" multiple accept=".xlsx, .xls" style="display: none;">
         <div id="drop-zone">
@@ -73,13 +72,10 @@
 
         <div class="controls">
             <div class="control-row">
-                <div class="control-group" style="flex-grow: 1; width: 100%;">
-                    <label for="header-override-input">手動標頭 (用逗號,分隔)：</label>
-                    <input type="text" id="header-override-input" placeholder="例如：項目, 112年度決算數, 113年度預算..." disabled>
-                </div>
-            </div>
-
-            <div class="control-row">
+                 <div class="control-group">
+                    <label>標頭列 (Row)：</label>
+                    <input type="number" id="header-row-input" value="5" min="1" disabled>
+                 </div>
                 <div class="control-group">
                     <label>資料起始：</label>
                     <select id="start-col-select" disabled></select>
@@ -96,12 +92,14 @@
             <hr style="border: none; border-top: 1px solid #e0e0e0; width: 100%; margin: 10px 0;">
 
             <div class="control-row">
-                <div class="control-group">
+                 <div class="control-group">
                     <label>檢視模式：</label>
                     <div class="mode-selector">
                         <input type="radio" id="mode-individual" name="view-mode" value="individual" checked>
-                        <label for="mode-individual">個別摘要</label> <input type="radio" id="mode-sum" name="view-mode" value="sum">
-                        <label for="mode-sum">所有檔案加總</label> <input type="radio" id="mode-compare" name="view-mode" value="compare">
+                        <label for="mode-individual">個別摘要</label>
+                        <input type="radio" id="mode-sum" name="view-mode" value="sum">
+                        <label for="mode-sum">所有檔案加總</label>
+                        <input type="radio" id="mode-compare" name="view-mode" value="compare">
                         <label for="mode-compare">單項比較</label>
                     </div>
                 </div>
@@ -119,6 +117,28 @@
                  <button id="download-html-btn" disabled>產生並下載HTML報告</button>
                  <button id="download-json-btn" disabled>匯出JSON檔</button>
             </div>
+
+            <hr style="border: none; border-top: 1px solid #e0e0e0; width: 100%; margin: 10px 0;">
+            <div class="control-row" style="flex-wrap: wrap; gap: 25px;">
+                 <label style="width: 100%; font-weight: bold; color: #007bff;">JSON 匯出設定 (必填)</label>
+                <div class="control-group">
+                    <label for="json-item-col">"科目" 欄位：</label>
+                    <select id="json-item-col" disabled></select>
+                </div>
+                <div class="control-group">
+                    <label for="json-prev-col">"前年度決算數" 欄位：</label>
+                    <select id="json-prev-col" disabled></select>
+                </div>
+                 <div class="control-group">
+                    <label for="json-last-col">"上年度預算數" 欄位：</label>
+                    <select id="json-last-col" disabled></select>
+                </div>
+                <div class="control-group">
+                    <label for="json-current-col">"本年度預算數" 欄位：</label>
+                    <select id="json-current-col" disabled></select>
+                </div>
+            </div>
+
         </div>
         
         <div id="status"></div>
@@ -133,13 +153,20 @@
         const statusDiv = document.getElementById('status');
         const tableContainer = document.getElementById('table-container');
 
-        // --- (v4) DOM 元素 ---
-        const headerOverrideInput = document.getElementById('header-override-input');
+        // --- (v6) DOM 元素 ---
+        const headerRowInput = document.getElementById('header-row-input'); // v6 新增
         const startColSelect = document.getElementById('start-col-select');
         const startRowInput = document.getElementById('start-row-input');
         const endColSelect = document.getElementById('end-col-select');
         const endRowInput = document.getElementById('end-row-input');
         const processBtn = document.getElementById('process-btn');
+        
+        // --- (v6) JSON 對應 DOM ---
+        const jsonItemCol = document.getElementById('json-item-col');
+        const jsonPrevCol = document.getElementById('json-prev-col');
+        const jsonLastCol = document.getElementById('json-last-col');
+        const jsonCurrentCol = document.getElementById('json-current-col');
+        const jsonSelects = [jsonItemCol, jsonPrevCol, jsonLastCol, jsonCurrentCol];
 
         // 檢視模式 & 下拉選單
         const modeRadios = document.querySelectorAll('input[name="view-mode"]');
@@ -154,7 +181,7 @@
 
         // --- 全域變數 ---
         let allData = []; 
-        let fundNames = []; // 仍叫 fundNames，但實質上存的是檔案名
+        let fundNames = []; 
         let itemNames = [];
         let uploadedFiles = null; 
         
@@ -165,9 +192,9 @@
         function populateColumnSelects() {
             const selects = [startColSelect, endColSelect];
             selects.forEach(select => {
-                select.innerHTML = ''; // 清空
+                select.innerHTML = '';
                 for (let i = 0; i < 26; i++) {
-                    const colLetter = String.fromCharCode(65 + i); // 65 是 'A'
+                    const colLetter = String.fromCharCode(65 + i); // 'A'
                     const option = document.createElement('option');
                     option.value = colLetter;
                     option.textContent = colLetter;
@@ -202,7 +229,7 @@
         // --- 主要功能函式 ---
 
         /**
-         * (v4) `handleFiles` 啟用手動輸入 UI
+         * (v6) `handleFiles` 啟用手動輸入 UI
          */
         function handleFiles(files) {
             if (!files || files.length === 0) return;
@@ -212,67 +239,97 @@
             resetUI(false); 
             statusDiv.textContent = `已選擇 ${files.length} 個檔案。請確認標頭與資料範圍後點擊處理。`;
             
-            // 啟用所有 v4 輸入
-            headerOverrideInput.disabled = false;
+            // 啟用所有 v6 輸入
+            headerRowInput.disabled = false;
             startColSelect.disabled = false;
             startRowInput.disabled = false;
             endColSelect.disabled = false;
             endRowInput.disabled = false;
             processBtn.disabled = false;
-
-            // (v4) 填入一個合理的預設標頭字串
-            headerOverrideInput.value = "項目, 112年度決算數, 113年度預算數, 114年度原編數, 114年度主管機關核列數, 114年度行政院增減數, 114年度待協商數, 114年度行政院核列數, 114年度核列數與原編數差額";
         }
 
         /**
-         * (v4) `startProcessing` - 依賴使用者的輸入
+         * *** 修改點 (3) ***
+         * `startProcessing` - v6 核心邏輯
+         * 動態讀取標頭，不再驗證 9 欄
          */
-        function startProcessing() {
+        async function startProcessing() {
             if (!uploadedFiles || uploadedFiles.length === 0) {
                 alert("請先上傳檔案。");
                 return;
             }
 
-            // 1. 從 UI 獲取所有設定
-            const headerString = headerOverrideInput.value;
+            // 1. 從 UI 獲取所有範圍設定
+            const headerRow = parseInt(headerRowInput.value, 10);
             const startCol = startColSelect.value;
             const startRow = parseInt(startRowInput.value, 10);
             const endCol = endColSelect.value;
             const endRow = parseInt(endRowInput.value, 10);
 
-            // 2. 驗證輸入
-            if (!headerString) {
-                alert("請手動輸入標頭！");
+            // 2. 驗證範圍
+            if (isNaN(headerRow) || headerRow <= 0) {
+                alert("請輸入有效的標頭列編號！");
                 return;
             }
-            const headers = headerString.split(',').map(h => h.trim());
-            if (headers.length !== 9) {
-                alert(`標頭數量不符！您輸入了 ${headers.length} 個，但程式需要 9 個。`);
+            if (isNaN(startRow) || isNaN(endRow) || startRow <= headerRow || endRow < startRow) {
+                alert("請輸入有效的資料起始/結束列數！(資料起始列必須 > 標頭列)");
                 return;
             }
-            if (isNaN(startRow) || isNaN(endRow) || startRow <= 0 || endRow <= 0 || endRow < startRow) {
-                alert("請輸入有效的資料起始/結束列數！");
+            const startColIndex = XLSX.utils.decode_col(startCol);
+            const endColIndex = XLSX.utils.decode_col(endCol);
+            if (endColIndex < startColIndex) {
+                alert("結束欄位必須在起始欄位之後！");
                 return;
             }
-            
-            // 3. 設定全域變數
-            FIXED_HEADERS = headers;
-            ROWS_PER_FILE = endRow - startRow + 1;
-            const dataRange = `${startCol}${startRow}:${endCol}${endRow}`;
 
-            // 4. 重置資料陣列並開始處理
+            // 3. 重置 UI 並開始處理
             resetUI(false); 
-            statusDiv.textContent = `處理中... 使用範圍 ${dataRange}，共 ${uploadedFiles.length} 個檔案。`;
+            statusDiv.textContent = `處理中... 正在讀取第一個檔案的標頭...`;
             processBtn.disabled = true;
 
-            // 5. 偵測成功，開始逐一處理所有檔案
+            const dataRange = `${startCol}${startRow}:${endCol}${endRow}`;
+            const headerRange = `${startCol}${headerRow}:${endCol}${headerRow}`; // e.g., A5:I5
+
+            try {
+                // 4. 動態讀取標頭 (從第一個檔案)
+                const firstFile = uploadedFiles[0];
+                const workbook = await readFileAsWorkbook(firstFile);
+                const firstSheetName = workbook.SheetNames[0];
+                const mainSheet = workbook.Sheets[firstSheetName];
+
+                // 讀取標頭列的資料
+                const headerData = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: headerRange, defval: null });
+                
+                if (!headerData || headerData.length === 0 || !headerData[0]) {
+                     throw new Error(`在 ${headerRange} 範圍內找不到標頭資料。`);
+                }
+
+                // 5. 設定全域變數
+                FIXED_HEADERS = headerData[0].map(h => h ? String(h).trim() : `(空欄位 ${headerRange})`);
+                ROWS_PER_FILE = endRow - startRow + 1;
+
+                // 6. *** v6 核心 ***
+                // 用讀取到的標頭，填充 JSON 下拉選單
+                populateJsonSelects(FIXED_HEADERS);
+                jsonSelects.forEach(s => s.disabled = false);
+
+            } catch (error) {
+                statusDiv.textContent = `讀取標頭時發生錯誤：${error.message}`;
+                console.error(error);
+                processBtn.disabled = false;
+                return;
+            }
+
+
+            // 7. 標頭讀取成功，開始處理所有檔案
+            statusDiv.textContent = `標頭讀取完成。正在處理 ${uploadedFiles.length} 個檔案...`;
             const filePromises = Array.from(uploadedFiles).map(file => processFile(file, dataRange));
 
             Promise.all(filePromises)
                 .then(() => {
                     fundNames.sort();
                     itemNames.sort();
-                    statusDiv.textContent = `處理完成！共 ${fundNames.length} 個檔案。`; // 修改文字
+                    statusDiv.textContent = `處理完成！共 ${fundNames.length} 個檔案。`;
                     populateDropdowns();
                     if (allData.length > 0) {
                         refreshTable();
@@ -289,10 +346,7 @@
         }
         
         /**
-         * *** 修改點 (2) ***
-         * `processFile` - v5 核心修改
-         * 不再讀取 B2，改用 file.name
-         * 內部 key 改為 '檔案名稱'
+         * (v5) `processFile` - 只需讀取檔案，不需改動
          */
         function processFile(file, dataRange) {
              return new Promise((resolve, reject) => {
@@ -303,9 +357,6 @@
                         const firstSheetName = workbook.SheetNames[0];
                         const mainSheet = workbook.Sheets[firstSheetName];
                         
-                        // *** v5 核心修改 ***
-                        // 移除讀取 B2 的邏輯
-                        // 改用檔案名稱 (不含副檔名)
                         const fileExtensionRegex = /\.(xlsx|xls)$/i;
                         const fundName = file.name.replace(fileExtensionRegex, "").trim();
 
@@ -315,10 +366,8 @@
                         const rows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: dataRange, defval: null });
 
                         const records = rows.map(rowArray => {
-                            // *** v5 核心修改：key 改為 '檔案名稱' ***
                             const record = { '檔案名稱': fundName }; 
-                            
-                            // 核心：使用使用者指定的 FIXED_HEADERS
+                            // 核心：使用動態讀取的 FIXED_HEADERS
                             FIXED_HEADERS.forEach((header, index) => {
                                 record[header] = rowArray[index];
                             });
@@ -339,6 +388,50 @@
                 reader.readAsArrayBuffer(file);
             });
         }
+        
+        /**
+         * *** 新函式 (B) ***
+         * `readFileAsWorkbook` - 輔助函式 (來自 v3)
+         */
+        function readFileAsWorkbook(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const workbook = XLSX.read(e.target.result, { type: 'array' });
+                        resolve(workbook);
+                    } catch (err) {
+                        reject(new Error(`解析 ${file.name} 失敗: ${err.message}`));
+                    }
+                };
+                reader.onerror = () => reject(new Error(`讀取 ${file.name} 失敗`));
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        /**
+         * *** 新函式 (C) ***
+         * `populateJsonSelects` - v6 核心
+         * 填充 JSON 對應的下拉選單
+         */
+        function populateJsonSelects(headers) {
+            jsonSelects.forEach(select => {
+                select.innerHTML = ''; // 清空
+                headers.forEach(header => {
+                    const option = document.createElement('option');
+                    option.value = header;
+                    option.textContent = header;
+                    select.appendChild(option);
+                });
+            });
+
+            // 嘗試根據 v4/v5 的假設設定預設值 (如果欄位存在)
+            // 這是為了方便使用者，即使失敗也沒關係
+            if (headers[0]) jsonItemCol.value = headers[0];
+            if (headers[1]) jsonPrevCol.value = headers[1];
+            if (headers[2]) jsonLastCol.value = headers[2];
+            if (headers[7]) jsonCurrentCol.value = headers[7];
+        }
 
 
         function resetUI(fullReset = true) {
@@ -348,20 +441,26 @@
             [fundSelect, itemSelect, downloadHtmlBtn, downloadJsonBtn].forEach(el => el.disabled = true);
             tableContainer.innerHTML = '';
             
+            // 禁用 JSON 下拉選單
+            jsonSelects.forEach(s => {
+                s.innerHTML = '';
+                s.disabled = true;
+            });
+
             if (fullReset) {
                 uploadedFiles = null;
                 processBtn.disabled = true;
                 fileInput.value = ''; // 清除已選擇的檔案
                 
-                // 禁用所有 v4 輸入
-                headerOverrideInput.disabled = true;
+                // 禁用所有 v6 輸入
+                headerRowInput.disabled = true;
                 startColSelect.disabled = true;
                 startRowInput.disabled = true;
                 endColSelect.disabled = true;
                 endRowInput.disabled = true;
 
                 // 恢復預設值
-                headerOverrideInput.value = '';
+                headerRowInput.value = 5;
                 startColSelect.value = 'A';
                 startRowInput.value = 6;
                 endColSelect.value = 'I';
@@ -370,6 +469,8 @@
         }
         
         // --- (v5) 後續函式修改 ---
+        // --- `populateDropdowns`, `refreshTable`, `display...`, `createTable`, `formatNumber` ---
+        // --- 這些函式 *完全不需要* 修改，因為它們都正確依賴 `FIXED_HEADERS` ---
         
         function populateDropdowns() {
             const populate = (selectEl, options) => {
@@ -416,16 +517,10 @@
             }
         }
 
-        /**
-         * *** 修改點 (3) ***
-         * `displayIndividualFundTable` - v5 修改
-         * 過濾 '檔案名稱'
-         */
         function displayIndividualFundTable(fundName) {
-            // *** v5 修改：過濾 '檔案名稱' ***
             const records = allData.filter(r => r['檔案名稱'] === fundName); 
             if (!records || records.length === 0) {
-                tableContainer.innerHTML = `<p>找不到檔案「${fundName}」的資料。</p>`; // 修改文字
+                tableContainer.innerHTML = `<p>找不到檔案「${fundName}」的資料。</p>`;
                 return;
             }
             const table = createTable(FIXED_HEADERS);
@@ -449,8 +544,10 @@
             }
             
             const summaryData = [];
+            // ROWS_PER_FILE 在 startProcessing 中已設定
             for (let i = 0; i < ROWS_PER_FILE; i++) {
                 const summaryRow = {};
+                // FIXED_HEADERS 在 startProcessing 中已設定
                 FIXED_HEADERS.forEach((header, headerIndex) => {
                     if (headerIndex === 0) {
                         summaryRow[header] = allData[i]?.[header];
@@ -481,29 +578,22 @@
             tableContainer.appendChild(table);
         }
 
-        /**
-         * *** 修改點 (4) ***
-         * `displayItemComparisonTable` - v5 修改
-         * 標頭改為 '檔案名稱'
-         */
         function displayItemComparisonTable(itemName) {
             if (!allData || allData.length === 0 || !itemName) {
                 tableContainer.innerHTML = `<p>無法進行項目比較。</p>`;
                 return;
             }
             const firstColumnHeader = FIXED_HEADERS[0];
-            // *** v5 修改：標頭改為 '檔案名稱' ***
             const comparisonHeaders = ['檔案名稱', ...FIXED_HEADERS.slice(1)]; 
             const table = createTable(comparisonHeaders);
             const tbody = table.querySelector('tbody');
 
             fundNames.forEach(fund => {
-                // *** v5 修改：過濾 '檔案名稱' ***
                 const itemRowData = allData.find(r => r['檔案名稱'] === fund && r[firstColumnHeader] === itemName);
                 const row = document.createElement('tr');
                 
                 let cell = document.createElement('td');
-                cell.textContent = fund; // fund 即為檔案名
+                cell.textContent = fund;
                 row.appendChild(cell);
 
                 comparisonHeaders.slice(1).forEach(header => {
@@ -540,11 +630,7 @@
             return value != null ? value : '';
         }
         
-        /**
-         * *** 修改點 (5) ***
-         * `generateAndDownloadHtml` - v5 修改
-         * 標題文字修改
-         */
+        // (v5) `generateAndDownloadHtml` - 不需修改
         function generateAndDownloadHtml() {
             const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
             let modeText = '';
@@ -552,11 +638,11 @@
 
             switch (selectedMode) {
                 case 'individual':
-                    modeText = '個別檔案摘要報告'; // 修改文字
-                    subTitle = `檔案：${fundSelect.value}`; // *** v5 修改 ***
+                    modeText = '個別檔案摘要報告'; 
+                    subTitle = `檔案：${fundSelect.value}`; 
                     break;
                 case 'sum':
-                    modeText = '所有檔案加總報告'; // 修改文字
+                    modeText = '所有檔案加總報告'; 
                     break;
                 case 'compare':
                     modeText = '單項比較報告';
@@ -587,9 +673,9 @@
         }
 
         /**
-         * *** 修改點 (6) ***
-         * `generateAndDownloadJson` - v5 修改
-         * JSON 的 "基金名稱" 欄位，其 *值* 來自 '檔案名稱'
+         * *** 修改點 (4) ***
+         * `generateAndDownloadJson` - v6 核心
+         * 讀取 JSON 對應下拉選單的值，不再依賴索引
          */
         function generateAndDownloadJson() {
             if (allData.length === 0) {
@@ -597,22 +683,21 @@
                 return;
             }
             
-            // (v4) 假設使用者輸入的標頭順序
-            const itemHeader = FIXED_HEADERS[0]; 
-            const prevYearHeader = FIXED_HEADERS[1]; // 112
-            const lastYearHeader = FIXED_HEADERS[2]; // 113
-            const currentYearHeader = FIXED_HEADERS[7]; // 114 行政院核列數
+            // *** v6 核心：從下拉選單讀取使用者指定的 "標頭名稱" ***
+            const itemHeader = jsonItemCol.value;
+            const prevYearHeader = jsonPrevCol.value;
+            const lastYearHeader = jsonLastCol.value;
+            const currentYearHeader = jsonCurrentCol.value;
 
-            if (!currentYearHeader || !lastYearHeader || !prevYearHeader) {
-                alert("匯出 JSON 失敗：手動輸入的標頭不完整。");
+            // 驗證使用者是否已完成設定
+            if (!itemHeader || !prevYearHeader || !lastYearHeader || !currentYearHeader) {
+                alert("匯出 JSON 失敗：請在 'JSON 匯出設定' 中，將所有欄位都對應到讀取到的標頭！");
                 return;
             }
 
             const jsonData = allData.map(record => {
-                // *** v5 修改 ***
-                // 不再需要處理 prefix，直接取用 '檔案名稱'
                 return {
-                    "基金名稱": record['檔案名稱'], // Key 保持 "基金名稱", Value 使用 '檔案名稱'
+                    "基金名稱": record['檔案名稱'], // (v5)
                     "科目": record[itemHeader],
                     "本年度預算數": record[currentYearHeader],
                     "上年度預算數": record[lastYearHeader],
