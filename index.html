@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (自動偵測版)</title>
+    <title>基金資料彙總報告產生器 (自動偵測版 v2)</title>
 
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
@@ -29,16 +29,16 @@
 
         /* --- 控制項樣式 --- */
         .controls { margin-bottom: 2em; padding: 1.5em; background-color: #f8f9fa; border-radius: 8px; display: flex; flex-direction: column; gap: 20px; }
-        .control-row { display: flex; align-items: center; flex-wrap: wrap; gap: 25px; }
+        .control-row { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; }
         .control-group { display: flex; align-items: center; gap: 10px; }
-        label { font-size: 1.1em; font-weight: 500; }
+        label { font-size: 1.1em; font-weight: 500; white-space: nowrap; }
         select, button, input[type="text"] { padding: 12px 18px; font-size: 1em; border-radius: 6px; border: 1px solid #ced4da; transition: all 0.2s ease-in-out; }
         select { cursor: pointer; }
-        input[type="text"] { flex-grow: 1; min-width: 100px; }
+        input[type="text"] { flex-grow: 1; min-width: 120px; }
         select:focus, button:focus, input[type="text"]:focus { outline: none; border-color: #80bdff; box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); }
         button { background-color: #28a745; color: white; border-color: #28a745; font-weight: 500; cursor: pointer; }
         #download-json-btn { background-color: #007bff; border-color: #007bff; }
-        #process-btn { background-color: #fd7e14; border-color: #fd7e14; } /* 新增的按鈕樣式 */
+        #process-btn { background-color: #fd7e14; border-color: #fd7e14; }
         button:hover:not(:disabled) { opacity: 0.85; }
         button:disabled { background-color: #c0cdda; border-color: #c0cdda; cursor: not-allowed; }
 
@@ -55,13 +55,12 @@
         thead { background-color: #007bff; color: white; }
         tbody tr:nth-child(even) { background-color: #f8f9fa; }
         tbody tr:hover { background-color: #e9ecef; }
-        /* 右對齊數字欄位 */
         td:not(:first-child) { text-align: right; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>基金資料彙總報告產生器 (自動偵測版)</h1>
+        <h1>基金資料彙總報告產生器 (自動偵測版 v2)</h1>
         
         <input type="file" id="file-input" multiple accept=".xlsx, .xls" style="display: none;">
         <div id="drop-zone">
@@ -85,11 +84,15 @@
             </div>
 
             <div class="control-row">
-                <div class="control-group" style="flex-grow: 1;">
-                    <label for="range-input">偵測範圍：</label>
-                    <input type="text" id="range-input" placeholder="請先上傳檔案以自動偵測" disabled>
+                <div class="control-group" style="flex-grow: 2;">
+                    <label for="anchor-keyword-input">錨點關鍵字：</label>
+                    <input type="text" id="anchor-keyword-input" value="項目">
                 </div>
-                 <button id="process-btn" disabled>確認範圍並處理</button>
+                 <div class="control-group" style="flex-grow: 3;">
+                    <label for="range-input">資料範圍 (自動)：</label>
+                    <input type="text" id="range-input" placeholder="處理時自動偵測" disabled>
+                </div>
+                 <button id="process-btn" disabled>開始處理</button>
             </div>
             <hr style="border: none; border-top: 1px solid #e0e0e0; width: 100%; margin: 0;">
 
@@ -126,20 +129,19 @@
         const fundSelectGroup = document.getElementById('fund-select-group');
         const itemSelectGroup = document.getElementById('item-select-group');
 
-        // --- 新增的 DOM 元素 ---
+        // --- 修改的 DOM 元素 ---
         const rangeInput = document.getElementById('range-input');
         const processBtn = document.getElementById('process-btn');
+        const anchorKeywordInput = document.getElementById('anchor-keyword-input'); // 新增
 
-        // --- 全域變數與固定設定 ---
+        // --- 全域變數 ---
         let allData = []; 
         let fundNames = [];
         let itemNames = [];
-        let uploadedFiles = null; // 暫存上傳的檔案
-        let detectedConfig = null; // 暫存偵測到的設定
-
+        let uploadedFiles = null; 
+        
         // --- *** 修改點 (2) *** ---
-        // 這些變數不再是 "常數" (const)，
-        // 它們將在使用者點擊 "確認範圍" 按鈕後被動態填入。
+        // 這些變數將在 `startProcessing` 中被動態填入
         let FIXED_HEADERS = [];
         let ROWS_PER_FILE = 0; 
         
@@ -159,15 +161,15 @@
         downloadHtmlBtn.addEventListener('click', generateAndDownloadHtml);
         downloadJsonBtn.addEventListener('click', generateAndDownloadJson);
 
-        // --- 新增的事件監聽 ---
         processBtn.addEventListener('click', startProcessing);
 
         // --- 主要功能函式 ---
 
         /**
          * *** 修改點 (3) ***
-         * `handleFiles` 現在只處理第一個檔案，用於偵測範圍。
-         * 真正的資料處理將移至 `startProcessing` 函式。
+         * `handleFiles` 現在極度簡化。
+         * 它只負責接收檔案，重置UI，並啟用 "開始處理" 按鈕。
+         * 所有的偵測和讀取工作都移交給 `startProcessing`。
          */
         function handleFiles(files) {
             if (!files || files.length === 0) return;
@@ -175,67 +177,39 @@
             // 儲存檔案列表以供稍後處理
             uploadedFiles = files;
             
-            // 重置 UI，但保留檔案列表
+            // 重置 UI
             resetUI(false); 
-            statusDiv.textContent = `偵測中... 正在分析第一個檔案：${files[0].name}`;
-
-            const firstFile = files[0];
-            const reader = new FileReader();
+            statusDiv.textContent = `已選擇 ${files.length} 個檔案。請確認 "錨點關鍵字" 並點擊處理。`;
             
-            reader.onload = (e) => {
-                try {
-                    const workbook = XLSX.read(e.target.result, { type: 'array' });
-                    const firstSheetName = workbook.SheetNames[0];
-                    const mainSheet = workbook.Sheets[firstSheetName];
-
-                    // *** 呼叫新的偵測函式 ***
-                    const result = findDataRange(mainSheet);
-                    
-                    // 儲存偵測結果
-                    detectedConfig = {
-                        headers: result.headers,
-                        rowsPerFile: result.rowsPerFile
-                    };
-                    
-                    // 更新 UI
-                    rangeInput.value = result.range;
-                    rangeInput.disabled = false;
-                    processBtn.disabled = false;
-                    statusDiv.textContent = `偵測完成！範圍為 ${result.range}。請確認範圍後點擊處理。`;
-
-                } catch (err) {
-                    statusDiv.textContent = `偵測失敗：${err.message}`;
-                    console.error(err);
-                    resetUI(true); // 徹底重置
-                }
-            };
-            reader.onerror = () => {
-                statusDiv.textContent = `讀取 ${firstFile.name} 失敗`;
-                resetUI(true);
-            };
-            reader.readAsArrayBuffer(firstFile);
+            // 啟用處理按鈕
+            processBtn.disabled = false;
         }
 
         /**
-         * *** 新函式 (A) ***
-         * 核心的資料範圍偵測邏輯
+         * *** 修改點 (4) ***
+         * `findDataRange` 現在接收 `anchorKeyword` 作為參數。
          * @param {object} sheet - SheetJS 的工作表物件
+         * @param {string} anchorKeyword - 用於搜尋標頭的關鍵字 (例如 "項目")
          * @returns {object} - { range: string, headers: string[], rowsPerFile: number }
          */
-        function findDataRange(sheet) {
-            // 關鍵錨點，我們假設資料一定從 "項目" 開始
-            const ANCHOR_HEADER = "項目"; 
-            
-            // 將整個工作表轉為二維陣列
+        function findDataRange(sheet, anchorKeyword) {
+            if (!anchorKeyword || anchorKeyword.trim() === "") {
+                throw new Error("錨點關鍵字不能為空。");
+            }
+
             const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
 
-            let headerRowIndex = -1; // 標頭列的索引 (0-based)
-            let startColIndex = -1;  // "項目" 欄位的索引 (0-based)
+            let headerRowIndex = -1;
+            let startColIndex = -1;  
 
-            // 1. 尋找標頭列 (包含 "項目" 的那-列)
+            // 1. 尋找標頭列 (使用傳入的 anchorKeyword)
             for (let i = 0; i < rows.length; i++) {
                 if (!rows[i]) continue;
-                const colIndex = rows[i].indexOf(ANCHOR_HEADER);
+                // 搜尋時，同時比對儲存格內容和傳入的關鍵字 (都先 trim 掉空白)
+                const colIndex = rows[i].findIndex(cell => 
+                    cell != null && String(cell).trim() === anchorKeyword.trim()
+                );
+                
                 if (colIndex !== -1) {
                     headerRowIndex = i;
                     startColIndex = colIndex;
@@ -244,11 +218,11 @@
             }
 
             if (headerRowIndex === -1) {
-                throw new Error("在工作表中找不到 '項目' 標頭欄。");
+                // 拋出更明確的錯誤
+                throw new Error(`在工作表中找不到 '${anchorKeyword}' 標頭欄。`);
             }
 
             // 2. 取得完整的標頭陣列 (假設固定 9 欄)
-            //    我們也必須處理標頭欄位前後可能的多餘空白
             const headers = rows[headerRowIndex]
                 .slice(startColIndex, startColIndex + 9)
                 .map(h => h ? String(h).trim() : null);
@@ -258,10 +232,9 @@
             }
 
             // 3. 尋找資料結束列
-            let endDataRowIndex = headerRowIndex; // 最後一筆資料的列索引
+            let endDataRowIndex = headerRowIndex; 
             for (let i = headerRowIndex + 1; i < rows.length; i++) {
                 const row = rows[i];
-                // 如果該列為空，或 "項目" 欄位為空值，即為資料結尾
                 if (!row || row[startColIndex] == null || String(row[startColIndex]).trim() === "") {
                     break;
                 }
@@ -269,16 +242,16 @@
             }
 
             if (endDataRowIndex === headerRowIndex) {
-                throw new Error("在 '項目' 標頭下找不到任何資料列。");
+                throw new Error(`在 '${anchorKeyword}' 標頭下找不到任何資料列。`);
             }
 
             // 4. 計算範圍
-            const rowsPerFile = endDataRowIndex - headerRowIndex; // 資料行數 (不含標頭)
-            const startRow = headerRowIndex + 2; // 資料起始列 (Excel 1-based)
-            const endRow = endDataRowIndex + 1;   // 資料結束列 (Excel 1-based)
+            const rowsPerFile = endDataRowIndex - headerRowIndex; 
+            const startRow = headerRowIndex + 2; 
+            const endRow = endDataRowIndex + 1;   
             
             const startColLetter = XLSX.utils.encode_col(startColIndex);
-            const endColLetter = XLSX.utils.encode_col(startColIndex + 8); // 9 欄
+            const endColLetter = XLSX.utils.encode_col(startColIndex + 8);
 
             const rangeString = `${startColLetter}${startRow}:${endColLetter}${endRow}`;
 
@@ -291,37 +264,64 @@
 
 
         /**
-         * *** 新函式 (B) ***
-         * 當使用者點擊 "確認範圍並處理" 時觸發
+         * *** 修改點 (5) ***
+         * `startProcessing` 現在是所有工作的起點。
+         * 它會讀取第一個檔案來偵測範圍，然後才處理所有檔案。
          */
-        function startProcessing() {
+        async function startProcessing() {
             if (!uploadedFiles || uploadedFiles.length === 0) {
                 alert("沒有偵測到檔案。");
                 return;
             }
-            
-            // 1. 從輸入框獲取最終的資料範圍
-            const dataRange = rangeInput.value;
-            if (!dataRange) {
-                alert("資料範圍不能為空。");
+
+            // 1. 取得使用者輸入的錨點
+            const anchorKeyword = anchorKeywordInput.value;
+            if (!anchorKeyword) {
+                alert("請輸入錨點關鍵字 (例如：項目)。");
                 return;
             }
 
-            // 2. 設定全域變數 (!!! 關鍵步驟 !!!)
-            //    現在，所有舊的函式 (processFile, displayAggregatedTable) 都能正常運作了
-            FIXED_HEADERS = detectedConfig.headers;
-            ROWS_PER_FILE = detectedConfig.rowsPerFile;
-
-            // 3. 重置資料陣列並開始處理
+            // 2. 重置 UI 並顯示讀取中
             resetUI(false); 
-            statusDiv.textContent = `處理中... 已選擇 ${uploadedFiles.length} 個檔案。`;
-            
+            statusDiv.textContent = `處理中... 正在使用 '${anchorKeyword}' 偵測範圍...`;
+            processBtn.disabled = true;
+
+            let dataRange;
+
+            try {
+                // 3. 讀取第一個檔案以偵測範圍
+                const firstFile = uploadedFiles[0];
+                const workbook = await readFileAsWorkbook(firstFile);
+                const firstSheetName = workbook.SheetNames[0];
+                const mainSheet = workbook.Sheets[firstSheetName];
+
+                // 4. 呼叫 findDataRange 並傳入關鍵字
+                const result = findDataRange(mainSheet, anchorKeyword);
+                
+                // 5. 設定全域變數
+                dataRange = result.range;
+                FIXED_HEADERS = result.headers;
+                ROWS_PER_FILE = result.rowsPerFile;
+
+                // 6. 更新 UI 顯示偵測結果
+                rangeInput.value = dataRange;
+                statusDiv.textContent = `範圍 ${dataRange} 偵測完成。正在處理 ${uploadedFiles.length} 個檔案...`;
+
+            } catch (error) {
+                // 如果偵測失敗，顯示錯誤並停止
+                statusDiv.textContent = `錯誤：${error.message}`;
+                console.error(error);
+                processBtn.disabled = false; // 讓使用者可以重試
+                return;
+            }
+
+            // 7. 偵測成功，開始逐一處理所有檔案
             const filePromises = Array.from(uploadedFiles).map(file => processFile(file, dataRange));
 
             Promise.all(filePromises)
                 .then(() => {
                     fundNames.sort();
-                    itemNames.sort(); // 確保項目名稱也排序
+                    itemNames.sort();
                     statusDiv.textContent = `處理完成！共 ${fundNames.length} 個基金。`;
                     populateDropdowns();
                     if (allData.length > 0) {
@@ -329,11 +329,33 @@
                         downloadHtmlBtn.disabled = false;
                         downloadJsonBtn.disabled = false;
                     }
+                    processBtn.disabled = false; // 允許再次處理
                 })
                 .catch(error => {
                     statusDiv.textContent = `處理檔案時發生錯誤：${error.message}`;
                     console.error(error);
+                    processBtn.disabled = false;
                 });
+        }
+
+        /**
+         * *** 新函式 (A) ***
+         * 將 FileReader 包裝成 Promise，使其支援 await
+         */
+        function readFileAsWorkbook(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const workbook = XLSX.read(e.target.result, { type: 'array' });
+                        resolve(workbook);
+                    } catch (err) {
+                        reject(new Error(`解析 ${file.name} 失敗: ${err.message}`));
+                    }
+                };
+                reader.onerror = () => reject(new Error(`讀取 ${file.name} 失敗`));
+                reader.readAsArrayBuffer(file);
+            });
         }
 
 
@@ -346,60 +368,51 @@
             
             if (fullReset) {
                 uploadedFiles = null;
-                detectedConfig = null;
                 rangeInput.value = '';
-                rangeInput.disabled = true;
                 processBtn.disabled = true;
                 fileInput.value = ''; // 清除已選擇的檔案
             }
+            // 注意：我們保留了 anchorKeywordInput 的值
         }
 
         /**
-         * *** 修改點 (4) ***
-         * 此函式幾乎不變，因為它依賴的全域變數 `FIXED_HEADERS`
-         * 已經在 `startProcessing` 中被正確設定了。
+         * *** 修改點 (6) ***
+         * `processFile` 現在需要讀取工作簿，而不是檔案本身 (因為第一個檔案可能已被讀取)
+         * 為了保持一致，我們讓它也使用 awaitable 的函式
          */
-        function processFile(file, dataRange) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const workbook = XLSX.read(e.target.result, { type: 'array' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const mainSheet = workbook.Sheets[firstSheetName];
-                        
-                        const fileNamePrefix = file.name.split('-')[0];
-                        let fundNameFromCell = XLSX.utils.sheet_to_json(mainSheet, { header: 1, defval: null })[1]?.[0] || `未知基金`;
-                        fundNameFromCell = fundNameFromCell.replace("基金名稱：", "").trim();
-                        const fundName = `${fileNamePrefix}-${fundNameFromCell}`;
+        async function processFile(file, dataRange) {
+            try {
+                // 每個檔案都重新讀取
+                const workbook = await readFileAsWorkbook(file);
+                const firstSheetName = workbook.SheetNames[0];
+                const mainSheet = workbook.Sheets[firstSheetName];
+                
+                const fileNamePrefix = file.name.split('-')[0];
+                let fundNameFromCell = XLSX.utils.sheet_to_json(mainSheet, { header: 1, defval: null })[1]?.[0] || `未知基金`;
+                fundNameFromCell = fundNameFromCell.replace("基金名稱：", "").trim();
+                const fundName = `${fileNamePrefix}-${fundNameFromCell}`;
 
-                        if (!fundNames.includes(fundName)) fundNames.push(fundName);
+                if (!fundNames.includes(fundName)) fundNames.push(fundName);
 
-                        // 這裡使用傳入的 dataRange
-                        const rows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: dataRange, defval: null });
+                const rows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: dataRange, defval: null });
 
-                        const records = rows.map(rowArray => {
-                            const record = { '基金名稱': fundName };
-                            // 這裡使用動態設定的 FIXED_HEADERS
-                            FIXED_HEADERS.forEach((header, index) => {
-                                record[header] = rowArray[index];
-                            });
-                            const itemName = record[FIXED_HEADERS[0]];
-                            if (itemName && !itemNames.includes(itemName)) {
-                                itemNames.push(itemName);
-                            }
-                            return record;
-                        });
-                        
-                        allData.push(...records);
-                        resolve();
-                    } catch (err) {
-                        reject(new Error(`解析 ${file.name} 失敗: ${err.message}`));
+                const records = rows.map(rowArray => {
+                    const record = { '基金名稱': fundName };
+                    FIXED_HEADERS.forEach((header, index) => {
+                        record[header] = rowArray[index];
+                    });
+                    const itemName = record[FIXED_HEADERS[0]]; // 第一欄 (錨點欄)
+                    if (itemName && !itemNames.includes(itemName)) {
+                        itemNames.push(itemName);
                     }
-                };
-                reader.onerror = () => reject(new Error(`讀取 ${file.name} 失敗`));
-                reader.readAsArrayBuffer(file);
-            });
+                    return record;
+                });
+                
+                allData.push(...records);
+            } catch (err) {
+                // 重新拋出錯誤，讓 Promise.all() 可以捕捉到
+                throw new Error(`處理 ${file.name} 時失敗: ${err.message}`);
+            }
         }
         
         function populateDropdowns() {
@@ -447,13 +460,16 @@
             }
         }
 
+        // --- 顯示表格的函式 (display...) ---
+        // 這些函式都不需修改，因為它們依賴的
+        // FIXED_HEADERS 和 ROWS_PER_FILE 已經在 startProcessing 被正確設定
+
         function displayIndividualFundTable(fundName) {
             const records = allData.filter(r => r['基金名稱'] === fundName);
             if (!records || records.length === 0) {
                 tableContainer.innerHTML = `<p>找不到基金「${fundName}」的資料。</p>`;
                 return;
             }
-            // 使用動態設定的 FIXED_HEADERS
             const table = createTable(FIXED_HEADERS);
             const tbody = table.querySelector('tbody');
             records.forEach(record => {
@@ -468,11 +484,6 @@
             tableContainer.appendChild(table);
         }
 
-        /**
-         * *** 修改點 (5) ***
-         * 此函式幾乎不變，因為它依賴的全域變數 `ROWS_PER_FILE` 和 `FIXED_HEADERS`
-         * 已經在 `startProcessing` 中被正確設定了。
-         */
         function displayAggregatedTable() {
             if (!allData || allData.length === 0) {
                 tableContainer.innerHTML = `<p>沒有可加總的資料。</p>`;
@@ -480,7 +491,6 @@
             }
             
             const summaryData = [];
-            // 使用動態設定的 ROWS_PER_FILE
             for (let i = 0; i < ROWS_PER_FILE; i++) {
                 const summaryRow = {};
                 FIXED_HEADERS.forEach((header, headerIndex) => {
@@ -518,7 +528,6 @@
                 tableContainer.innerHTML = `<p>無法進行項目比較。</p>`;
                 return;
             }
-            // 使用動態設定的 FIXED_HEADERS
             const firstColumnHeader = FIXED_HEADERS[0];
             const comparisonHeaders = ['基金名稱', ...FIXED_HEADERS.slice(1)];
             const table = createTable(comparisonHeaders);
@@ -543,6 +552,8 @@
             tableContainer.appendChild(table);
         }
 
+        // --- 輔助函式 (createTable, formatNumber) ---
+
         function createTable(headers) {
             const table = document.createElement('table');
             const thead = document.createElement('thead');
@@ -566,6 +577,8 @@
             return value != null ? value : '';
         }
         
+        // --- 匯出函式 (generate...) ---
+
         function generateAndDownloadHtml() {
             const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
             let modeText = '';
@@ -613,12 +626,17 @@
                 return;
             }
             
-            // *** 修改點 (6) ***
             // 確保 JSON 匯出也使用動態的標頭
-            const itemHeader = FIXED_HEADERS[0]; // "項目"
-            const currentYearHeader = FIXED_HEADERS[8]; // "行政院核列數"
-            const lastYearHeader = FIXED_HEADERS[2]; // "上年度預算"
-            const prevYearHeader = FIXED_HEADERS[1]; // "前年度決算"
+            // 我們假設欄位順序是固定的 (第1, 9, 3, 2欄)
+            const itemHeader = FIXED_HEADERS[0]; 
+            const currentYearHeader = FIXED_HEADERS[8]; 
+            const lastYearHeader = FIXED_HEADERS[2]; 
+            const prevYearHeader = FIXED_HEADERS[1]; 
+
+            if (!currentYearHeader || !lastYearHeader || !prevYearHeader) {
+                alert("匯出 JSON 失敗：動態偵測的標頭不完整。");
+                return;
+            }
 
             const jsonData = allData.map(record => {
                 const fullName = record['基金名稱'];
