@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v4 - 精確指定版)</title>
+    <title>基金資料彙總報告產生器 (v5 - 通用檔案名稱版)</title>
 
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
     <style>
+        /* --- (CSS 樣式保持不變) --- */
         /* --- 整體頁面樣式 --- */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -62,7 +63,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>基金資料彙總報告產生器 (v4 - 精確指定版)</h1>
+        <h1>基金資料彙總報告產生器 (v5 - 通用檔案名稱版)</h1>
         
         <input type="file" id="file-input" multiple accept=".xlsx, .xls" style="display: none;">
         <div id="drop-zone">
@@ -99,10 +100,8 @@
                     <label>檢視模式：</label>
                     <div class="mode-selector">
                         <input type="radio" id="mode-individual" name="view-mode" value="individual" checked>
-                        <label for="mode-individual">個別基金摘要</label>
-                        <input type="radio" id="mode-sum" name="view-mode" value="sum">
-                        <label for="mode-sum">所有基金加總</label>
-                        <input type="radio" id="mode-compare" name="view-mode" value="compare">
+                        <label for="mode-individual">個別摘要</label> <input type="radio" id="mode-sum" name="view-mode" value="sum">
+                        <label for="mode-sum">所有檔案加總</label> <input type="radio" id="mode-compare" name="view-mode" value="compare">
                         <label for="mode-compare">單項比較</label>
                     </div>
                 </div>
@@ -110,7 +109,7 @@
 
             <div class="control-row">
                 <div class="control-group" id="fund-select-group">
-                    <label for="fund-select">選擇基金：</label>
+                    <label for="fund-select">選擇檔案：</label>
                     <select id="fund-select" disabled></select>
                 </div>
                 <div class="control-group" id="item-select-group" style="display: none;">
@@ -134,7 +133,7 @@
         const statusDiv = document.getElementById('status');
         const tableContainer = document.getElementById('table-container');
 
-        // --- *** v4 新增/修改的 DOM 元素 *** ---
+        // --- (v4) DOM 元素 ---
         const headerOverrideInput = document.getElementById('header-override-input');
         const startColSelect = document.getElementById('start-col-select');
         const startRowInput = document.getElementById('start-row-input');
@@ -155,17 +154,14 @@
 
         // --- 全域變數 ---
         let allData = []; 
-        let fundNames = [];
+        let fundNames = []; // 仍叫 fundNames，但實質上存的是檔案名
         let itemNames = [];
         let uploadedFiles = null; 
         
-        // *** 修改點 (2) ***
-        // 這兩個變數現在將由 v4 的 UI 輸入完全決定
         let FIXED_HEADERS = [];
         let ROWS_PER_FILE = 0; 
 
-        // --- *** 新函式 (A) *** ---
-        // 填充 A-Z 下拉選單
+        // --- 填充 A-Z 下拉選單 ---
         function populateColumnSelects() {
             const selects = [startColSelect, endColSelect];
             selects.forEach(select => {
@@ -178,7 +174,6 @@
                     select.appendChild(option);
                 }
             });
-            // 設定預設值
             startColSelect.value = 'A';
             endColSelect.value = 'I';
         }
@@ -199,7 +194,7 @@
         downloadHtmlBtn.addEventListener('click', generateAndDownloadHtml);
         downloadJsonBtn.addEventListener('click', generateAndDownloadJson);
 
-        processBtn.addEventListener('click', startProcessing); // *** v4 核心 ***
+        processBtn.addEventListener('click', startProcessing);
 
         // --- 立即執行 ---
         populateColumnSelects(); // 頁面載入時填充 A-Z 選單
@@ -207,15 +202,13 @@
         // --- 主要功能函式 ---
 
         /**
-         * *** 修改點 (3) ***
-         * `handleFiles` 現在只啟用 v4 的手動輸入 UI
+         * (v4) `handleFiles` 啟用手動輸入 UI
          */
         function handleFiles(files) {
             if (!files || files.length === 0) return;
             
             uploadedFiles = files;
             
-            // 重置 UI
             resetUI(false); 
             statusDiv.textContent = `已選擇 ${files.length} 個檔案。請確認標頭與資料範圍後點擊處理。`;
             
@@ -227,14 +220,12 @@
             endRowInput.disabled = false;
             processBtn.disabled = false;
 
-            // 根據截圖，填入一個合理的預設標頭字串 (幫助使用者)
+            // (v4) 填入一個合理的預設標頭字串
             headerOverrideInput.value = "項目, 112年度決算數, 113年度預算數, 114年度原編數, 114年度主管機關核列數, 114年度行政院增減數, 114年度待協商數, 114年度行政院核列數, 114年度核列數與原編數差額";
         }
 
         /**
-         * *** 修改點 (4) ***
-         * `startProcessing` - v4 核心邏輯
-         * 完全移除偵測，100% 依賴使用者的輸入
+         * (v4) `startProcessing` - 依賴使用者的輸入
          */
         function startProcessing() {
             if (!uploadedFiles || uploadedFiles.length === 0) {
@@ -255,7 +246,6 @@
                 return;
             }
             const headers = headerString.split(',').map(h => h.trim());
-            // 根據你的截圖，資料固定為 9 欄
             if (headers.length !== 9) {
                 alert(`標頭數量不符！您輸入了 ${headers.length} 個，但程式需要 9 個。`);
                 return;
@@ -282,7 +272,7 @@
                 .then(() => {
                     fundNames.sort();
                     itemNames.sort();
-                    statusDiv.textContent = `處理完成！共 ${fundNames.length} 個基金。`;
+                    statusDiv.textContent = `處理完成！共 ${fundNames.length} 個檔案。`; // 修改文字
                     populateDropdowns();
                     if (allData.length > 0) {
                         refreshTable();
@@ -299,10 +289,10 @@
         }
         
         /**
-         * *** 修改點 (5) ***
-         * `processFile` 現在極度簡化。
-         * 它不需要自己讀取 workbook，也不需要偵測。
-         * 它只需要使用傳入的 `dataRange` 和全域的 `FIXED_HEADERS`
+         * *** 修改點 (2) ***
+         * `processFile` - v5 核心修改
+         * 不再讀取 B2，改用 file.name
+         * 內部 key 改為 '檔案名稱'
          */
         function processFile(file, dataRange) {
              return new Promise((resolve, reject) => {
@@ -313,11 +303,11 @@
                         const firstSheetName = workbook.SheetNames[0];
                         const mainSheet = workbook.Sheets[firstSheetName];
                         
-                        // 讀取 "基金名稱" (假設它總是在 B2)
-                        const fileNamePrefix = file.name.split('-')[0];
-                        let fundNameFromCell = XLSX.utils.sheet_to_json(mainSheet, { header: 1, defval: null })[1]?.[1] || `未知基金`; // [1][1] -> B2
-                        fundNameFromCell = fundNameFromCell.replace("基金名稱：", "").trim();
-                        const fundName = `${fileNamePrefix}-${fundNameFromCell}`;
+                        // *** v5 核心修改 ***
+                        // 移除讀取 B2 的邏輯
+                        // 改用檔案名稱 (不含副檔名)
+                        const fileExtensionRegex = /\.(xlsx|xls)$/i;
+                        const fundName = file.name.replace(fileExtensionRegex, "").trim();
 
                         if (!fundNames.includes(fundName)) fundNames.push(fundName);
 
@@ -325,7 +315,9 @@
                         const rows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: dataRange, defval: null });
 
                         const records = rows.map(rowArray => {
-                            const record = { '基金名稱': fundName };
+                            // *** v5 核心修改：key 改為 '檔案名稱' ***
+                            const record = { '檔案名稱': fundName }; 
+                            
                             // 核心：使用使用者指定的 FIXED_HEADERS
                             FIXED_HEADERS.forEach((header, index) => {
                                 record[header] = rowArray[index];
@@ -377,9 +369,7 @@
             }
         }
         
-        // --- 後續函式 (populateDropdowns, refreshTable, display... , generate...) ---
-        // --- 這些函式完全不需要修改，因為它們依賴的 FIXED_HEADERS 和 ROWS_PER_FILE ---
-        // --- 已經在 startProcessing 中被正確設定了 ---
+        // --- (v5) 後續函式修改 ---
         
         function populateDropdowns() {
             const populate = (selectEl, options) => {
@@ -426,10 +416,16 @@
             }
         }
 
+        /**
+         * *** 修改點 (3) ***
+         * `displayIndividualFundTable` - v5 修改
+         * 過濾 '檔案名稱'
+         */
         function displayIndividualFundTable(fundName) {
-            const records = allData.filter(r => r['基金名稱'] === fundName);
+            // *** v5 修改：過濾 '檔案名稱' ***
+            const records = allData.filter(r => r['檔案名稱'] === fundName); 
             if (!records || records.length === 0) {
-                tableContainer.innerHTML = `<p>找不到基金「${fundName}」的資料。</p>`;
+                tableContainer.innerHTML = `<p>找不到檔案「${fundName}」的資料。</p>`; // 修改文字
                 return;
             }
             const table = createTable(FIXED_HEADERS);
@@ -485,22 +481,29 @@
             tableContainer.appendChild(table);
         }
 
+        /**
+         * *** 修改點 (4) ***
+         * `displayItemComparisonTable` - v5 修改
+         * 標頭改為 '檔案名稱'
+         */
         function displayItemComparisonTable(itemName) {
             if (!allData || allData.length === 0 || !itemName) {
                 tableContainer.innerHTML = `<p>無法進行項目比較。</p>`;
                 return;
             }
             const firstColumnHeader = FIXED_HEADERS[0];
-            const comparisonHeaders = ['基金名稱', ...FIXED_HEADERS.slice(1)];
+            // *** v5 修改：標頭改為 '檔案名稱' ***
+            const comparisonHeaders = ['檔案名稱', ...FIXED_HEADERS.slice(1)]; 
             const table = createTable(comparisonHeaders);
             const tbody = table.querySelector('tbody');
 
             fundNames.forEach(fund => {
-                const itemRowData = allData.find(r => r['基金名稱'] === fund && r[firstColumnHeader] === itemName);
+                // *** v5 修改：過濾 '檔案名稱' ***
+                const itemRowData = allData.find(r => r['檔案名稱'] === fund && r[firstColumnHeader] === itemName);
                 const row = document.createElement('tr');
                 
                 let cell = document.createElement('td');
-                cell.textContent = fund;
+                cell.textContent = fund; // fund 即為檔案名
                 row.appendChild(cell);
 
                 comparisonHeaders.slice(1).forEach(header => {
@@ -537,19 +540,23 @@
             return value != null ? value : '';
         }
         
+        /**
+         * *** 修改點 (5) ***
+         * `generateAndDownloadHtml` - v5 修改
+         * 標題文字修改
+         */
         function generateAndDownloadHtml() {
-            // ... (此函式不變)
             const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
             let modeText = '';
             let subTitle = ``;
 
             switch (selectedMode) {
                 case 'individual':
-                    modeText = '個別基金摘要報告';
-                    subTitle = `基金：${fundSelect.value}`;
+                    modeText = '個別檔案摘要報告'; // 修改文字
+                    subTitle = `檔案：${fundSelect.value}`; // *** v5 修改 ***
                     break;
                 case 'sum':
-                    modeText = '所有基金加總報告';
+                    modeText = '所有檔案加總報告'; // 修改文字
                     break;
                 case 'compare':
                     modeText = '單項比較報告';
@@ -579,16 +586,18 @@
             URL.revokeObjectURL(link.href);
         }
 
+        /**
+         * *** 修改點 (6) ***
+         * `generateAndDownloadJson` - v5 修改
+         * JSON 的 "基金名稱" 欄位，其 *值* 來自 '檔案名稱'
+         */
         function generateAndDownloadJson() {
             if (allData.length === 0) {
                 alert('沒有可匯出的資料！');
                 return;
             }
             
-            // *** 修改點 (6) ***
-            // 由於標頭是手動輸入的，我們 *假設* 使用者輸入的順序是
-            // 1 (項目), 2 (前年), 3 (上年), ... , 8 (本年)
-            // 這是 v4 唯一依賴 "順序" 的地方
+            // (v4) 假設使用者輸入的標頭順序
             const itemHeader = FIXED_HEADERS[0]; 
             const prevYearHeader = FIXED_HEADERS[1]; // 112
             const lastYearHeader = FIXED_HEADERS[2]; // 113
@@ -600,11 +609,10 @@
             }
 
             const jsonData = allData.map(record => {
-                const fullName = record['基金名稱'];
-                const nameWithoutPrefix = fullName.substring(fullName.indexOf('-') + 1);
-
+                // *** v5 修改 ***
+                // 不再需要處理 prefix，直接取用 '檔案名稱'
                 return {
-                    "基金名稱": nameWithoutPrefix,
+                    "基金名稱": record['檔案名稱'], // Key 保持 "基金名稱", Value 使用 '檔案名稱'
                     "科目": record[itemHeader],
                     "本年度預算數": record[currentYearHeader],
                     "上年度預算數": record[lastYearHeader],
