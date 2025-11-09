@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v6 - 動態欄位通用版)</title>
+    <title>基金資料彙總報告產生器 (v7 - 預覽 + 動態設定)</title>
 
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
@@ -41,6 +41,7 @@
         button { background-color: #28a745; color: white; border-color: #28a745; font-weight: 500; cursor: pointer; }
         #download-json-btn { background-color: #007bff; border-color: #007bff; }
         #process-btn { background-color: #fd7e14; border-color: #fd7e14; font-weight: bold; }
+        #preview-btn { background-color: #17a2b8; border-color: #17a2b8; } /* *** v7 *** */
         button:hover:not(:disabled) { opacity: 0.85; }
         button:disabled { background-color: #c0cdda; border-color: #c0cdda; cursor: not-allowed; }
 
@@ -52,17 +53,56 @@
 
         /* --- 狀態和表格樣式 --- */
         #status { margin-bottom: 1.5em; color: #555; font-weight: bold; height: 20px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 1em; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); border-radius: 8px; overflow: hidden; }
-        th, td { border: 1px solid #e9ecef; padding: 14px 18px; text-align: left; vertical-align: middle; }
-        thead { background-color: #007bff; color: white; }
-        tbody tr:nth-child(even) { background-color: #f8f9fa; }
-        tbody tr:hover { background-color: #e9ecef; }
-        td:not(:first-child) { text-align: right; }
+
+        /* --- *** v7: 預覽區域樣式 *** --- */
+        #preview-container {
+            max-height: 500px;
+            overflow: auto;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            margin-bottom: 2em;
+        }
+        #preview-container table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.9em;
+        }
+        #preview-container th, #preview-container td {
+            border: 1px solid #e0e0e0;
+            padding: 8px 12px;
+            white-space: nowrap;
+        }
+        #preview-container thead th {
+            position: -webkit-sticky; /* Safari */
+            position: sticky;
+            top: 0;
+            background-color: #e9ecef;
+            z-index: 2;
+        }
+        #preview-container tbody th {
+            position: -webkit-sticky; /* Safari */
+            position: sticky;
+            left: 0;
+            background-color: #e9ecef;
+            z-index: 1;
+        }
+        #preview-container thead th:first-child {
+            z-index: 3; /* 確保左上角在最上層 */
+            left: 0;
+        }
+        
+        /* --- 主要表格樣式 (保持不變) --- */
+        #table-container table { border-collapse: collapse; width: 100%; margin-top: 1em; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); border-radius: 8px; overflow: hidden; }
+        #table-container th, #table-container td { border: 1px solid #e9ecef; padding: 14px 18px; text-align: left; vertical-align: middle; }
+        #table-container thead { background-color: #007bff; color: white; }
+        #table-container tbody tr:nth-child(even) { background-color: #f8f9fa; }
+        #table-container tbody tr:hover { background-color: #e9ecef; }
+        #table-container td:not(:first-child) { text-align: right; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>基金資料彙總報告產生器 (v6 - 動態欄位通用版)</h1>
+        <h1>基金資料彙總報告產生器 (v7 - 預覽 + 動態設定)</h1>
         
         <input type="file" id="file-input" multiple accept=".xlsx, .xls" style="display: none;">
         <div id="drop-zone">
@@ -72,6 +112,9 @@
 
         <div class="controls">
             <div class="control-row">
+                 <div class="control-group">
+                    <button id="preview-btn" disabled>預覽第一個檔案</button>
+                 </div>
                  <div class="control-group">
                     <label>標頭列 (Row)：</label>
                     <input type="number" id="header-row-input" value="5" min="1" disabled>
@@ -120,7 +163,7 @@
 
             <hr style="border: none; border-top: 1px solid #e0e0e0; width: 100%; margin: 10px 0;">
             <div class="control-row" style="flex-wrap: wrap; gap: 25px;">
-                 <label style="width: 100%; font-weight: bold; color: #007bff;">JSON 匯出設定 (必填)</label>
+                 <label style="width: 100%; font-weight: bold; color: #007bff;">JSON 匯出設定 (處理後填寫)</label>
                 <div class="control-group">
                     <label for="json-item-col">"科目" 欄位：</label>
                     <select id="json-item-col" disabled></select>
@@ -142,6 +185,9 @@
         </div>
         
         <div id="status"></div>
+
+        <div id="preview-container"></div>
+        
         <div id="table-container"></div>
     </div>
 
@@ -153,13 +199,16 @@
         const statusDiv = document.getElementById('status');
         const tableContainer = document.getElementById('table-container');
 
-        // --- (v6) DOM 元素 ---
-        const headerRowInput = document.getElementById('header-row-input'); // v6 新增
+        // --- (v7) 預覽 + 設定 DOM ---
+        const previewBtn = document.getElementById('preview-btn'); // v7 新增
+        const previewContainer = document.getElementById('preview-container'); // v7 新增
+        const headerRowInput = document.getElementById('header-row-input'); 
         const startColSelect = document.getElementById('start-col-select');
         const startRowInput = document.getElementById('start-row-input');
         const endColSelect = document.getElementById('end-col-select');
         const endRowInput = document.getElementById('end-row-input');
         const processBtn = document.getElementById('process-btn');
+        const configInputs = [headerRowInput, startColSelect, startRowInput, endColSelect, endRowInput, processBtn];
         
         // --- (v6) JSON 對應 DOM ---
         const jsonItemCol = document.getElementById('json-item-col');
@@ -221,6 +270,7 @@
         downloadHtmlBtn.addEventListener('click', generateAndDownloadHtml);
         downloadJsonBtn.addEventListener('click', generateAndDownloadJson);
 
+        previewBtn.addEventListener('click', generatePreview); // *** v7 ***
         processBtn.addEventListener('click', startProcessing);
 
         // --- 立即執行 ---
@@ -229,7 +279,8 @@
         // --- 主要功能函式 ---
 
         /**
-         * (v6) `handleFiles` 啟用手動輸入 UI
+         * *** 修改點 (3) ***
+         * `handleFiles` (v7) - 僅啟用預覽按鈕
          */
         function handleFiles(files) {
             if (!files || files.length === 0) return;
@@ -237,21 +288,90 @@
             uploadedFiles = files;
             
             resetUI(false); 
-            statusDiv.textContent = `已選擇 ${files.length} 個檔案。請確認標頭與資料範圍後點擊處理。`;
+            previewContainer.innerHTML = ''; // 清除舊預覽
+            statusDiv.textContent = `已選擇 ${files.length} 個檔案。請點擊預覽。`;
             
-            // 啟用所有 v6 輸入
-            headerRowInput.disabled = false;
-            startColSelect.disabled = false;
-            startRowInput.disabled = false;
-            endColSelect.disabled = false;
-            endRowInput.disabled = false;
-            processBtn.disabled = false;
+            // 啟用預覽按鈕
+            previewBtn.disabled = false;
         }
 
         /**
-         * *** 修改點 (3) ***
-         * `startProcessing` - v6 核心邏輯
-         * 動態讀取標頭，不再驗證 9 欄
+         * *** 新函式 (A) ***
+         * `generatePreview` (來自 v3)
+         * 產生第一個檔案的預覽
+         */
+        async function generatePreview() {
+            if (!uploadedFiles || uploadedFiles.length === 0) {
+                alert("請先上傳檔案。");
+                return;
+            }
+
+            previewBtn.disabled = true;
+            statusDiv.textContent = "正在產生預覽...";
+            previewContainer.innerHTML = ''; // 清空
+
+            try {
+                const firstFile = uploadedFiles[0];
+                const workbook = await readFileAsWorkbook(firstFile);
+                const firstSheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[firstSheetName];
+
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+                const maxRows = Math.min(rows.length, 100);
+                const maxCols = Math.min(Math.max(26, ...rows.map(r => r ? r.length : 0)), 50); // 最多 50 欄
+
+                let html = '<table>';
+
+                // 1. 建立標頭列 (A, B, C...)
+                html += '<thead><tr><th></th>'; // 左上角空格
+                for (let j = 0; j < maxCols; j++) {
+                    html += '<th>' + XLSX.utils.encode_col(j) + '</th>';
+                }
+                html += '</tr></thead>';
+
+                // 2. 建立資料列 (1, 2, 3...)
+                html += '<tbody>';
+                for (let i = 0; i < maxRows; i++) {
+                    html += '<tr><th>' + (i + 1) + '</th>'; // 行號
+                    const row = rows[i] || [];
+                    for (let j = 0; j < maxCols; j++) {
+                        const cellValue = row[j] != null ? row[j] : '';
+                        html += '<td>' + escapeHTML(cellValue) + '</td>';
+                    }
+                    html += '</tr>';
+                }
+                html += '</tbody></table>';
+
+                previewContainer.innerHTML = html;
+                statusDiv.textContent = "預覽完成。請查看預覽，在上方填寫「標頭列」與「資料範圍」後點擊處理。";
+                
+                // *** v7 核心 ***
+                // 啟用 v6 的所有設定輸入框
+                configInputs.forEach(input => input.disabled = false);
+
+            } catch (err) {
+                statusDiv.textContent = `產生預覽失敗：${err.message}`;
+                previewBtn.disabled = false; // 允許重試
+            }
+        }
+        
+        // (來自 v3) 輔助函式：防止 XSS
+        function escapeHTML(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/[&<>"']/g, function(match) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[match];
+            });
+        }
+
+        /**
+         * (v6) `startProcessing` - 幾乎不變
          */
         async function startProcessing() {
             if (!uploadedFiles || uploadedFiles.length === 0) {
@@ -283,9 +403,10 @@
             }
 
             // 3. 重置 UI 並開始處理
-            resetUI(false); 
+            resetUI(false); // 只重置表格
             statusDiv.textContent = `處理中... 正在讀取第一個檔案的標頭...`;
-            processBtn.disabled = true;
+            previewBtn.disabled = true; // 處理中禁用預覽
+            configInputs.forEach(input => input.disabled = true); // 禁用設定
 
             const dataRange = `${startCol}${startRow}:${endCol}${endRow}`;
             const headerRange = `${startCol}${headerRow}:${endCol}${headerRow}`; // e.g., A5:I5
@@ -297,7 +418,6 @@
                 const firstSheetName = workbook.SheetNames[0];
                 const mainSheet = workbook.Sheets[firstSheetName];
 
-                // 讀取標頭列的資料
                 const headerData = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: headerRange, defval: null });
                 
                 if (!headerData || headerData.length === 0 || !headerData[0]) {
@@ -308,15 +428,16 @@
                 FIXED_HEADERS = headerData[0].map(h => h ? String(h).trim() : `(空欄位 ${headerRange})`);
                 ROWS_PER_FILE = endRow - startRow + 1;
 
-                // 6. *** v6 核心 ***
-                // 用讀取到的標頭，填充 JSON 下拉選單
+                // 6. (v6) 填充 JSON 下拉選單
                 populateJsonSelects(FIXED_HEADERS);
                 jsonSelects.forEach(s => s.disabled = false);
 
             } catch (error) {
                 statusDiv.textContent = `讀取標頭時發生錯誤：${error.message}`;
                 console.error(error);
-                processBtn.disabled = false;
+                // 恢復啟用
+                previewBtn.disabled = false;
+                configInputs.forEach(input => input.disabled = false);
                 return;
             }
 
@@ -336,17 +457,21 @@
                         downloadHtmlBtn.disabled = false;
                         downloadJsonBtn.disabled = false;
                     }
-                    processBtn.disabled = false; 
+                    // 恢復啟用
+                    previewBtn.disabled = false; 
+                    configInputs.forEach(input => input.disabled = false);
                 })
                 .catch(error => {
                     statusDiv.textContent = `處理檔案時發生錯誤：${error.message}`;
                     console.error(error);
-                    processBtn.disabled = false;
+                    // 恢復啟用
+                    previewBtn.disabled = false;
+                    configInputs.forEach(input => input.disabled = false);
                 });
         }
         
         /**
-         * (v5) `processFile` - 只需讀取檔案，不需改動
+         * (v6) `processFile` - 不需改動
          */
         function processFile(file, dataRange) {
              return new Promise((resolve, reject) => {
@@ -362,16 +487,14 @@
 
                         if (!fundNames.includes(fundName)) fundNames.push(fundName);
 
-                        // 核心：使用使用者指定的 dataRange 讀取資料
                         const rows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: dataRange, defval: null });
 
                         const records = rows.map(rowArray => {
                             const record = { '檔案名稱': fundName }; 
-                            // 核心：使用動態讀取的 FIXED_HEADERS
                             FIXED_HEADERS.forEach((header, index) => {
                                 record[header] = rowArray[index];
                             });
-                            const itemName = record[FIXED_HEADERS[0]]; // 第一欄 (錨點欄)
+                            const itemName = record[FIXED_HEADERS[0]]; 
                             if (itemName && !itemNames.includes(itemName)) {
                                 itemNames.push(itemName);
                             }
@@ -390,8 +513,7 @@
         }
         
         /**
-         * *** 新函式 (B) ***
-         * `readFileAsWorkbook` - 輔助函式 (來自 v3)
+         * (v6) `readFileAsWorkbook` - 輔助函式
          */
         function readFileAsWorkbook(file) {
             return new Promise((resolve, reject) => {
@@ -410,13 +532,17 @@
         }
 
         /**
-         * *** 新函式 (C) ***
-         * `populateJsonSelects` - v6 核心
-         * 填充 JSON 對應的下拉選單
+         * (v6) `populateJsonSelects` - 填充 JSON 對應的下拉選單
          */
         function populateJsonSelects(headers) {
             jsonSelects.forEach(select => {
                 select.innerHTML = ''; // 清空
+                // 新增一個空選項
+                const emptyOption = document.createElement('option');
+                emptyOption.value = "";
+                emptyOption.textContent = "--- 請選擇 ---";
+                select.appendChild(emptyOption);
+
                 headers.forEach(header => {
                     const option = document.createElement('option');
                     option.value = header;
@@ -425,15 +551,24 @@
                 });
             });
 
-            // 嘗試根據 v4/v5 的假設設定預設值 (如果欄位存在)
-            // 這是為了方便使用者，即使失敗也沒關係
-            if (headers[0]) jsonItemCol.value = headers[0];
-            if (headers[1]) jsonPrevCol.value = headers[1];
-            if (headers[2]) jsonLastCol.value = headers[2];
-            if (headers[7]) jsonCurrentCol.value = headers[7];
+            // 嘗試根據 v4/v5 的假設設定預設值
+            try {
+                if (headers.includes(headers[0])) jsonItemCol.value = headers[0];
+                if (headers.includes(headers[1])) jsonPrevCol.value = headers[1];
+                if (headers.includes(headers[2])) jsonLastCol.value = headers[2];
+                if (headers.includes(headers[7])) jsonCurrentCol.value = headers[7];
+            } catch(e) {
+                // 猜測失敗也沒關係
+                console.warn("自動猜測 JSON 欄位失敗: ", e.message);
+            }
         }
 
 
+        /**
+         * *** 修改點 (4) ***
+         * `resetUI` - v7 修改
+         * 需重置預覽和 v6 設定
+         */
         function resetUI(fullReset = true) {
             allData = [];
             fundNames = [];
@@ -449,15 +584,12 @@
 
             if (fullReset) {
                 uploadedFiles = null;
-                processBtn.disabled = true;
                 fileInput.value = ''; // 清除已選擇的檔案
+                previewContainer.innerHTML = ''; // 清除預覽
                 
-                // 禁用所有 v6 輸入
-                headerRowInput.disabled = true;
-                startColSelect.disabled = true;
-                startRowInput.disabled = true;
-                endColSelect.disabled = true;
-                endRowInput.disabled = true;
+                // 禁用所有 v7 輸入
+                previewBtn.disabled = true;
+                configInputs.forEach(input => input.disabled = true);
 
                 // 恢復預設值
                 headerRowInput.value = 5;
@@ -468,11 +600,10 @@
             }
         }
         
-        // --- (v5) 後續函式修改 ---
-        // --- `populateDropdowns`, `refreshTable`, `display...`, `createTable`, `formatNumber` ---
-        // --- 這些函式 *完全不需要* 修改，因為它們都正確依賴 `FIXED_HEADERS` ---
+        // --- (v5) 後續函式 (display... / generate...) ---
+        // --- 這些函式 *完全不需要* 修改 ---
         
-        function populateDropdowns() {
+        function populateDropdowns() { /* ... (v6 程式碼不變) ... */ 
             const populate = (selectEl, options) => {
                 const currentVal = selectEl.value;
                 selectEl.innerHTML = '';
@@ -495,8 +626,7 @@
             populate(fundSelect, fundNames);
             populate(itemSelect, itemNames);
         }
-
-        function refreshTable() {
+        function refreshTable() { /* ... (v6 程式碼不變) ... */ 
             const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
             if (allData.length === 0) return;
 
@@ -516,8 +646,7 @@
                     break;
             }
         }
-
-        function displayIndividualFundTable(fundName) {
+        function displayIndividualFundTable(fundName) { /* ... (v6 程式碼不變) ... */ 
             const records = allData.filter(r => r['檔案名稱'] === fundName); 
             if (!records || records.length === 0) {
                 tableContainer.innerHTML = `<p>找不到檔案「${fundName}」的資料。</p>`;
@@ -536,18 +665,15 @@
             });
             tableContainer.appendChild(table);
         }
-
-        function displayAggregatedTable() {
+        function displayAggregatedTable() { /* ... (v6 程式碼不變) ... */ 
             if (!allData || allData.length === 0) {
                 tableContainer.innerHTML = `<p>沒有可加總的資料。</p>`;
                 return;
             }
             
             const summaryData = [];
-            // ROWS_PER_FILE 在 startProcessing 中已設定
             for (let i = 0; i < ROWS_PER_FILE; i++) {
                 const summaryRow = {};
-                // FIXED_HEADERS 在 startProcessing 中已設定
                 FIXED_HEADERS.forEach((header, headerIndex) => {
                     if (headerIndex === 0) {
                         summaryRow[header] = allData[i]?.[header];
@@ -577,8 +703,7 @@
             });
             tableContainer.appendChild(table);
         }
-
-        function displayItemComparisonTable(itemName) {
+        function displayItemComparisonTable(itemName) { /* ... (v6 程式碼不變) ... */ 
             if (!allData || allData.length === 0 || !itemName) {
                 tableContainer.innerHTML = `<p>無法進行項目比較。</p>`;
                 return;
@@ -606,8 +731,7 @@
             });
             tableContainer.appendChild(table);
         }
-
-        function createTable(headers) {
+        function createTable(headers) { /* ... (v6 程式碼不變) ... */ 
             const table = document.createElement('table');
             const thead = document.createElement('thead');
             const tbody = document.createElement('tbody');
@@ -622,16 +746,13 @@
             table.appendChild(tbody);
             return table;
         }
-
-        function formatNumber(value) {
+        function formatNumber(value) { /* ... (v6 程式碼不變) ... */ 
             if (typeof value === 'number' && !isNaN(value)) {
                 return Math.round(value).toLocaleString('en-US');
             }
             return value != null ? value : '';
         }
-        
-        // (v5) `generateAndDownloadHtml` - 不需修改
-        function generateAndDownloadHtml() {
+        function generateAndDownloadHtml() { /* ... (v6 程式碼不變) ... */ 
             const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
             let modeText = '';
             let subTitle = ``;
@@ -673,9 +794,7 @@
         }
 
         /**
-         * *** 修改點 (4) ***
-         * `generateAndDownloadJson` - v6 核心
-         * 讀取 JSON 對應下拉選單的值，不再依賴索引
+         * (v6) `generateAndDownloadJson` - 讀取 JSON 對應下拉選單的值
          */
         function generateAndDownloadJson() {
             if (allData.length === 0) {
