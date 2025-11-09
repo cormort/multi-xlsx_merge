@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (自動偵測版 v2)</title>
+    <title>基金資料彙總報告產生器 (v3 - 帶預覽功能)</title>
 
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
@@ -39,28 +39,67 @@
         button { background-color: #28a745; color: white; border-color: #28a745; font-weight: 500; cursor: pointer; }
         #download-json-btn { background-color: #007bff; border-color: #007bff; }
         #process-btn { background-color: #fd7e14; border-color: #fd7e14; }
+        #preview-btn { background-color: #17a2b8; border-color: #17a2b8; } /* *** 新增 *** */
         button:hover:not(:disabled) { opacity: 0.85; }
         button:disabled { background-color: #c0cdda; border-color: #c0cdda; cursor: not-allowed; }
 
         /* --- 模式切換樣式 --- */
         .mode-selector { display: flex; background-color: #e9ecef; border-radius: 6px; padding: 5px; }
-        .mode-selector input[type="radio"] { display: none; }
-        .mode-selector label { padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: all 0.3s ease; }
-        .mode-selector input[type="radio"]:checked + label { background-color: #007bff; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        /* ... (略) ... */
 
         /* --- 狀態和表格樣式 --- */
         #status { margin-bottom: 1.5em; color: #555; font-weight: bold; height: 20px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 1em; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); border-radius: 8px; overflow: hidden; }
-        th, td { border: 1px solid #e9ecef; padding: 14px 18px; text-align: left; vertical-align: middle; }
-        thead { background-color: #007bff; color: white; }
-        tbody tr:nth-child(even) { background-color: #f8f9fa; }
-        tbody tr:hover { background-color: #e9ecef; }
-        td:not(:first-child) { text-align: right; }
+        
+        /* --- *** 新增：預覽區域樣式 *** --- */
+        #preview-container {
+            max-height: 500px;
+            overflow: auto;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            margin-bottom: 2em;
+        }
+        #preview-container table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.9em;
+        }
+        #preview-container th, #preview-container td {
+            border: 1px solid #e0e0e0;
+            padding: 8px 12px;
+            white-space: nowrap;
+        }
+        /* 實現行列凍結的關鍵 */
+        #preview-container thead th {
+            position: -webkit-sticky; /* Safari */
+            position: sticky;
+            top: 0;
+            background-color: #e9ecef;
+            z-index: 2;
+        }
+        #preview-container tbody th {
+            position: -webkit-sticky; /* Safari */
+            position: sticky;
+            left: 0;
+            background-color: #e9ecef;
+            z-index: 1;
+        }
+        #preview-container thead th:first-child {
+            z-index: 3; /* 確保左上角在最上層 */
+            left: 0;
+        }
+        
+        /* --- 主要表格樣式 (保持不變) --- */
+        #table-container table { border-collapse: collapse; width: 100%; margin-top: 1em; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); border-radius: 8px; overflow: hidden; }
+        #table-container th, #table-container td { border: 1px solid #e9ecef; padding: 14px 18px; text-align: left; vertical-align: middle; }
+        #table-container thead { background-color: #007bff; color: white; }
+        #table-container tbody tr:nth-child(even) { background-color: #f8f9fa; }
+        #table-container tbody tr:hover { background-color: #e9ecef; }
+        #table-container td:not(:first-child) { text-align: right; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>基金資料彙總報告產生器 (自動偵測版 v2)</h1>
+        <h1>基金資料彙總報告產生器 (v3 - 帶預覽功能)</h1>
         
         <input type="file" id="file-input" multiple accept=".xlsx, .xls" style="display: none;">
         <div id="drop-zone">
@@ -84,11 +123,14 @@
             </div>
 
             <div class="control-row">
-                <div class="control-group" style="flex-grow: 2;">
+                 <div class="control-group">
+                    <button id="preview-btn" disabled>預覽第一個檔案</button>
+                 </div>
+                 <div class="control-group" style="flex-grow: 1;">
                     <label for="anchor-keyword-input">錨點關鍵字：</label>
-                    <input type="text" id="anchor-keyword-input" value="項目">
+                    <input type="text" id="anchor-keyword-input" value="項目" disabled>
                 </div>
-                 <div class="control-group" style="flex-grow: 3;">
+                 <div class="control-group" style="flex-grow: 1;">
                     <label for="range-input">資料範圍 (自動)：</label>
                     <input type="text" id="range-input" placeholder="處理時自動偵測" disabled>
                 </div>
@@ -111,6 +153,9 @@
         </div>
         
         <div id="status"></div>
+        
+        <div id="preview-container"></div>
+        
         <div id="table-container"></div>
     </div>
 
@@ -119,20 +164,28 @@
         // --- DOM 元素 ---
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
-        const fundSelect = document.getElementById('fund-select');
-        const itemSelect = document.getElementById('item-select');
-        const tableContainer = document.getElementById('table-container');
         const statusDiv = document.getElementById('status');
-        const downloadHtmlBtn = document.getElementById('download-html-btn');
-        const downloadJsonBtn = document.getElementById('download-json-btn');
-        const modeRadios = document.querySelectorAll('input[name="view-mode"]');
-        const fundSelectGroup = document.getElementById('fund-select-group');
-        const itemSelectGroup = document.getElementById('item-select-group');
+        const tableContainer = document.getElementById('table-container');
 
-        // --- 修改的 DOM 元素 ---
+        // 控制項
+        const previewBtn = document.getElementById('preview-btn'); // *** 新增 ***
+        const anchorKeywordInput = document.getElementById('anchor-keyword-input');
         const rangeInput = document.getElementById('range-input');
         const processBtn = document.getElementById('process-btn');
-        const anchorKeywordInput = document.getElementById('anchor-keyword-input'); // 新增
+        const modeRadios = document.querySelectorAll('input[name="view-mode"]');
+        
+        // 下拉選單
+        const fundSelect = document.getElementById('fund-select');
+        const itemSelect = document.getElementById('item-select');
+        const fundSelectGroup = document.getElementById('fund-select-group');
+        const itemSelectGroup = document.getElementById('item-select-group');
+        
+        // 匯出按鈕
+        const downloadHtmlBtn = document.getElementById('download-html-btn');
+        const downloadJsonBtn = document.getElementById('download-json-btn');
+        
+        // *** 新增 ***
+        const previewContainer = document.getElementById('preview-container');
 
         // --- 全域變數 ---
         let allData = []; 
@@ -140,8 +193,6 @@
         let itemNames = [];
         let uploadedFiles = null; 
         
-        // --- *** 修改點 (2) *** ---
-        // 這些變數將在 `startProcessing` 中被動態填入
         let FIXED_HEADERS = [];
         let ROWS_PER_FILE = 0; 
         
@@ -161,40 +212,116 @@
         downloadHtmlBtn.addEventListener('click', generateAndDownloadHtml);
         downloadJsonBtn.addEventListener('click', generateAndDownloadJson);
 
+        previewBtn.addEventListener('click', generatePreview); // *** 新增 ***
         processBtn.addEventListener('click', startProcessing);
 
         // --- 主要功能函式 ---
 
         /**
          * *** 修改點 (3) ***
-         * `handleFiles` 現在極度簡化。
-         * 它只負責接收檔案，重置UI，並啟用 "開始處理" 按鈕。
-         * 所有的偵測和讀取工作都移交給 `startProcessing`。
+         * `handleFiles` 現在只啟用 "預覽" 按鈕
          */
         function handleFiles(files) {
             if (!files || files.length === 0) return;
             
-            // 儲存檔案列表以供稍後處理
             uploadedFiles = files;
             
             // 重置 UI
             resetUI(false); 
-            statusDiv.textContent = `已選擇 ${files.length} 個檔案。請確認 "錨點關鍵字" 並點擊處理。`;
+            previewContainer.innerHTML = ''; // 清除舊預覽
+            statusDiv.textContent = `已選擇 ${files.length} 個檔案。請點擊預覽。`;
             
-            // 啟用處理按鈕
-            processBtn.disabled = false;
+            // 啟用預覽按鈕
+            previewBtn.disabled = false;
+            anchorKeywordInput.disabled = true;
+            processBtn.disabled = true;
         }
 
         /**
-         * *** 修改點 (4) ***
-         * `findDataRange` 現在接收 `anchorKeyword` 作為參數。
+         * *** 新函式 (A) ***
+         * 產生第一個檔案的預覽
+         */
+        async function generatePreview() {
+            if (!uploadedFiles || uploadedFiles.length === 0) {
+                alert("請先上傳檔案。");
+                return;
+            }
+
+            previewBtn.disabled = true;
+            statusDiv.textContent = "正在產生預覽...";
+            previewContainer.innerHTML = ''; // 清空
+
+            try {
+                const firstFile = uploadedFiles[0];
+                const workbook = await readFileAsWorkbook(firstFile);
+                const firstSheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[firstSheetName];
+
+                // 核心：將 sheet 轉為 2D 陣列
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+                // 限制預覽的行列數，避免瀏覽器崩潰
+                const maxRows = Math.min(rows.length, 100);
+                const maxCols = Math.min(Math.max(...rows.map(r => r.length)), 26); // 最多到 Z 欄
+
+                let html = '<table>';
+
+                // 1. 建立標頭列 (A, B, C...)
+                html += '<thead><tr><th></th>'; // 左上角空格
+                for (let j = 0; j < maxCols; j++) {
+                    html += '<th>' + XLSX.utils.encode_col(j) + '</th>';
+                }
+                html += '</tr></thead>';
+
+                // 2. 建立資料列 (1, 2, 3...)
+                html += '<tbody>';
+                for (let i = 0; i < maxRows; i++) {
+                    html += '<tr><th>' + (i + 1) + '</th>'; // 行號
+                    const row = rows[i] || [];
+                    for (let j = 0; j < maxCols; j++) {
+                        const cellValue = row[j] != null ? row[j] : '';
+                        html += '<td>' + escapeHTML(cellValue) + '</td>';
+                    }
+                    html += '</tr>';
+                }
+                html += '</tbody></table>';
+
+                previewContainer.innerHTML = html;
+                statusDiv.textContent = "預覽完成。請查看下方預覽，在上方輸入「錨點關鍵字」後點擊處理。";
+                
+                // 啟用下一步
+                anchorKeywordInput.disabled = false;
+                processBtn.disabled = false;
+
+            } catch (err) {
+                statusDiv.textContent = `產生預覽失敗：${err.message}`;
+                previewBtn.disabled = false; // 允許重試
+            }
+        }
+        
+        // 輔助函式：防止 XSS
+        function escapeHTML(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/[&<>"']/g, function(match) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[match];
+            });
+        }
+
+
+        /**
+         * v2: `findDataRange` (保持不變)
          * @param {object} sheet - SheetJS 的工作表物件
          * @param {string} anchorKeyword - 用於搜尋標頭的關鍵字 (例如 "項目")
-         * @returns {object} - { range: string, headers: string[], rowsPerFile: number }
          */
         function findDataRange(sheet, anchorKeyword) {
             if (!anchorKeyword || anchorKeyword.trim() === "") {
-                throw new Error("錨點關鍵字不能為空。");
+                throw new Error("錨點關鍵Z不能為空。");
             }
 
             const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
@@ -202,10 +329,9 @@
             let headerRowIndex = -1;
             let startColIndex = -1;  
 
-            // 1. 尋找標頭列 (使用傳入的 anchorKeyword)
+            // 1. 尋找標頭列
             for (let i = 0; i < rows.length; i++) {
                 if (!rows[i]) continue;
-                // 搜尋時，同時比對儲存格內容和傳入的關鍵字 (都先 trim 掉空白)
                 const colIndex = rows[i].findIndex(cell => 
                     cell != null && String(cell).trim() === anchorKeyword.trim()
                 );
@@ -218,7 +344,6 @@
             }
 
             if (headerRowIndex === -1) {
-                // 拋出更明確的錯誤
                 throw new Error(`在工作表中找不到 '${anchorKeyword}' 標頭欄。`);
             }
 
@@ -264,9 +389,7 @@
 
 
         /**
-         * *** 修改點 (5) ***
-         * `startProcessing` 現在是所有工作的起點。
-         * 它會讀取第一個檔案來偵測範圍，然後才處理所有檔案。
+         * v2: `startProcessing` (幾乎不變)
          */
         async function startProcessing() {
             if (!uploadedFiles || uploadedFiles.length === 0) {
@@ -282,9 +405,10 @@
             }
 
             // 2. 重置 UI 並顯示讀取中
-            resetUI(false); 
+            resetUI(false); // 只重置表格
             statusDiv.textContent = `處理中... 正在使用 '${anchorKeyword}' 偵測範圍...`;
             processBtn.disabled = true;
+            previewBtn.disabled = true; // 處理中不允許預覽
 
             let dataRange;
 
@@ -304,14 +428,17 @@
                 ROWS_PER_FILE = result.rowsPerFile;
 
                 // 6. 更新 UI 顯示偵測結果
-                rangeInput.value = dataRange;
+                rangeInput.value = dataRange; // 填入自動偵測的範圍
                 statusDiv.textContent = `範圍 ${dataRange} 偵測完成。正在處理 ${uploadedFiles.length} 個檔案...`;
 
             } catch (error) {
-                // 如果偵測失敗，顯示錯誤並停止
+                // *** 修改點 (4) ***
+                // 如果偵測失敗，顯示錯誤並停止，並重新啟用按鈕
                 statusDiv.textContent = `錯誤：${error.message}`;
                 console.error(error);
                 processBtn.disabled = false; // 讓使用者可以重試
+                previewBtn.disabled = false; // 讓使用者可以重試
+                anchorKeywordInput.disabled = false;
                 return;
             }
 
@@ -329,18 +456,22 @@
                         downloadHtmlBtn.disabled = false;
                         downloadJsonBtn.disabled = false;
                     }
-                    processBtn.disabled = false; // 允許再次處理
+                    // 允許再次處理或預覽
+                    processBtn.disabled = false; 
+                    previewBtn.disabled = false;
+                    anchorKeywordInput.disabled = false;
                 })
                 .catch(error => {
                     statusDiv.textContent = `處理檔案時發生錯誤：${error.message}`;
                     console.error(error);
                     processBtn.disabled = false;
+                    previewBtn.disabled = false;
+                    anchorKeywordInput.disabled = false;
                 });
         }
 
         /**
-         * *** 新函式 (A) ***
-         * 將 FileReader 包裝成 Promise，使其支援 await
+         * v2: `readFileAsWorkbook` (不變)
          */
         function readFileAsWorkbook(file) {
             return new Promise((resolve, reject) => {
@@ -370,19 +501,18 @@
                 uploadedFiles = null;
                 rangeInput.value = '';
                 processBtn.disabled = true;
+                previewBtn.disabled = true;
+                anchorKeywordInput.disabled = true;
                 fileInput.value = ''; // 清除已選擇的檔案
+                previewContainer.innerHTML = ''; // 清除預覽
             }
-            // 注意：我們保留了 anchorKeywordInput 的值
         }
 
         /**
-         * *** 修改點 (6) ***
-         * `processFile` 現在需要讀取工作簿，而不是檔案本身 (因為第一個檔案可能已被讀取)
-         * 為了保持一致，我們讓它也使用 awaitable 的函式
+         * v2: `processFile` (不變)
          */
         async function processFile(file, dataRange) {
             try {
-                // 每個檔案都重新讀取
                 const workbook = await readFileAsWorkbook(file);
                 const firstSheetName = workbook.SheetNames[0];
                 const mainSheet = workbook.Sheets[firstSheetName];
@@ -410,10 +540,12 @@
                 
                 allData.push(...records);
             } catch (err) {
-                // 重新拋出錯誤，讓 Promise.all() 可以捕捉到
                 throw new Error(`處理 ${file.name} 時失敗: ${err.message}`);
             }
         }
+        
+        // --- 後續函式 (populateDropdowns, refreshTable, display... , generate...) ---
+        // --- 這些函式完全不需要修改 ---
         
         function populateDropdowns() {
             const populate = (selectEl, options) => {
@@ -459,10 +591,6 @@
                     break;
             }
         }
-
-        // --- 顯示表格的函式 (display...) ---
-        // 這些函式都不需修改，因為它們依賴的
-        // FIXED_HEADERS 和 ROWS_PER_FILE 已經在 startProcessing 被正確設定
 
         function displayIndividualFundTable(fundName) {
             const records = allData.filter(r => r['基金名稱'] === fundName);
@@ -552,8 +680,6 @@
             tableContainer.appendChild(table);
         }
 
-        // --- 輔助函式 (createTable, formatNumber) ---
-
         function createTable(headers) {
             const table = document.createElement('table');
             const thead = document.createElement('thead');
@@ -577,9 +703,8 @@
             return value != null ? value : '';
         }
         
-        // --- 匯出函式 (generate...) ---
-
         function generateAndDownloadHtml() {
+            // ... (此函式不變)
             const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
             let modeText = '';
             let subTitle = ``;
@@ -621,13 +746,12 @@
         }
 
         function generateAndDownloadJson() {
+            // ... (此函式不變)
             if (allData.length === 0) {
                 alert('沒有可匯出的資料！');
                 return;
             }
             
-            // 確保 JSON 匯出也使用動態的標頭
-            // 我們假設欄位順序是固定的 (第1, 9, 3, 2欄)
             const itemHeader = FIXED_HEADERS[0]; 
             const currentYearHeader = FIXED_HEADERS[8]; 
             const lastYearHeader = FIXED_HEADERS[2]; 
