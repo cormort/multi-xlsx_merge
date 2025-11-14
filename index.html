@@ -2,840 +2,446 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v7 - 預覽 + 動態設定)</title>
-
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Excel彙總工具-動態範圍/自訂欄位/多檔合併儲存格友善</title>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
     <style>
-        /* --- (CSS 樣式保持不變) --- */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Microsoft JhengHei,Roboto,"Helvetica Neue",Arial,sans-serif;
+            background: #f5f7fa;
             margin: 0;
-            padding: 2em;
-            background-color: #f4f7f9;
-            color: #333;
-            display: flex;
-            justify-content: center;
+            padding: 2.5em;
         }
-        .container { max-width: 1200px; width: 100%; background: white; padding: 2.5em; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08); }
-        h1 { color: #1a2c4e; border-bottom: 3px solid #007bff; padding-bottom: 15px; margin-top: 0; }
-
-        /* --- 拖曳區域樣式 --- */
-        #drop-zone { border: 3px dashed #c0cdda; border-radius: 10px; padding: 50px; text-align: center; color: #8a9bb3; font-size: 1.3em; cursor: pointer; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); margin-bottom: 2em; background-color: #fcfdff; }
-        #drop-zone.drag-over { border-color: #007bff; background-color: #e6f2ff; color: #0056b3; transform: scale(1.02); }
-        #drop-zone p { margin: 0; font-size: 1.5rem; font-weight: 500;}
-        #drop-zone span { font-size: 1rem; }
-
-        /* --- 控制項樣式 --- */
-        .controls { margin-bottom: 2em; padding: 1.5em; background-color: #f8f9fa; border-radius: 8px; display: flex; flex-direction: column; gap: 20px; }
-        .control-row { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; }
-        .control-group { display: flex; align-items: center; gap: 10px; }
-        label { font-size: 1.1em; font-weight: 500; white-space: nowrap; }
-        select, button, input[type="text"], input[type="number"] { padding: 12px 18px; font-size: 1em; border-radius: 6px; border: 1px solid #ced4da; transition: all 0.2s ease-in-out; }
-        select { cursor: pointer; }
-        input[type="text"] { flex-grow: 1; min-width: 120px; }
-        input[type="number"] { width: 100px; }
-        select:focus, button:focus, input:focus { outline: none; border-color: #80bdff; box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); }
-        
-        button { background-color: #28a745; color: white; border-color: #28a745; font-weight: 500; cursor: pointer; }
-        #download-json-btn { background-color: #007bff; border-color: #007bff; }
-        #process-btn { background-color: #fd7e14; border-color: #fd7e14; font-weight: bold; }
-        #preview-btn { background-color: #17a2b8; border-color: #17a2b8; } /* *** v7 *** */
-        button:hover:not(:disabled) { opacity: 0.85; }
-        button:disabled { background-color: #c0cdda; border-color: #c0cdda; cursor: not-allowed; }
-
-        /* --- 模式切換樣式 --- */
-        .mode-selector { display: flex; background-color: #e9ecef; border-radius: 6px; padding: 5px; }
-        .mode-selector input[type="radio"] { display: none; }
-        .mode-selector label { padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: all 0.3s ease; }
-        .mode-selector input[type="radio"]:checked + label { background-color: #007bff; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-
-        /* --- 狀態和表格樣式 --- */
-        #status { margin-bottom: 1.5em; color: #555; font-weight: bold; height: 20px; }
-
-        /* --- *** v7: 預覽區域樣式 *** --- */
-        #preview-container {
-            max-height: 500px;
-            overflow: auto;
-            border: 1px solid #ced4da;
-            border-radius: 8px;
-            margin-bottom: 2em;
+        .container {
+            margin: auto; background: #fff; border-radius: 12px; padding: 2em 2.5em;
+            box-shadow: 0 8px 24px rgba(0,0,0,.07);
+            max-width: 1250px;
         }
-        #preview-container table {
-            border-collapse: collapse;
-            width: 100%;
-            font-size: 0.9em;
+        h1 {margin-top:0;color:#1a2c4e;border-bottom:2px solid #007bff;padding-bottom:12px;}
+        #drop-zone {
+            border: 3px dashed #c0cdda; border-radius: 10px; background: #fcfdff;
+            color: #8a9bb3; padding: 42px 22px; text-align: center; font-size: 1.2em;
+            margin-bottom: 2em; cursor:pointer;
+            transition: all .3s;
         }
-        #preview-container th, #preview-container td {
-            border: 1px solid #e0e0e0;
-            padding: 8px 12px;
-            white-space: nowrap;
+        #drop-zone.drag-over { border-color:#007bff; background:#e6f2ff; color:#0056b3; }
+        .controls { margin-bottom: 2.2em; background:#f8f9fa; border-radius: 8px; padding:1.5em; display: flex;gap:18px;flex-wrap:wrap;}
+        .control-group{display:flex;align-items:center;gap:10px;}
+        label { font-size:1.07em; font-weight:500;}
+        select,button,input[type="number"],input[type="text"]{
+            border-radius:6px; border:1px solid #ced4da; padding:11px; font-size:1em;
         }
-        #preview-container thead th {
-            position: -webkit-sticky; /* Safari */
-            position: sticky;
-            top: 0;
-            background-color: #e9ecef;
-            z-index: 2;
-        }
-        #preview-container tbody th {
-            position: -webkit-sticky; /* Safari */
-            position: sticky;
-            left: 0;
-            background-color: #e9ecef;
-            z-index: 1;
-        }
-        #preview-container thead th:first-child {
-            z-index: 3; /* 確保左上角在最上層 */
-            left: 0;
-        }
-        
-        /* --- 主要表格樣式 (保持不變) --- */
-        #table-container table { border-collapse: collapse; width: 100%; margin-top: 1em; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); border-radius: 8px; overflow: hidden; }
-        #table-container th, #table-container td { border: 1px solid #e9ecef; padding: 14px 18px; text-align: left; vertical-align: middle; }
-        #table-container thead { background-color: #007bff; color: white; }
-        #table-container tbody tr:nth-child(even) { background-color: #f8f9fa; }
-        #table-container tbody tr:hover { background-color: #e9ecef; }
-        #table-container td:not(:first-child) { text-align: right; }
+        select,button{cursor:pointer;}
+        button {background:#28a745; color:white; font-weight: 500;}
+        button:disabled {background:#c0cdda;color:#fff;}
+        #process-btn {background:#fd7e14}
+        #preview-btn {background:#17a2b8;}
+        #download-html-btn {background:#007bff}
+        #download-json-btn {background:#6f42c1}
+        .mode-selector {display:flex;background:#e9ecef; border-radius:6px; padding:3px;}
+        .mode-selector input[type="radio"]{display:none;}
+        .mode-selector label {padding:7px 15px; border-radius:4px; cursor:pointer;}
+        .mode-selector input:checked + label {background:#007bff;color:#fff;}
+        #status{font-weight:600;color:#555;margin-bottom:1.2em;}
+        #progress-container{height:24px;background:#e5e9f2;border-radius:8px;overflow:hidden;margin-bottom:8px;}
+        #progress-bar{height:100%;background:#007bff;width:0%;transition: width .25s;}
+        #progress-text{margin-left:8px;}
+        #preview-container{max-height:340px;overflow:auto;border:1px solid #ced4da;border-radius:8px;margin-bottom: 1.3em;}
+        #preview-container table {border-collapse:collapse;width:100%;font-size:.93em;}
+        #preview-container th,#preview-container td{border:1px solid #e0e0e0; padding:7px 10px; white-space:nowrap;}
+        #preview-container .potential-merged {background:#fff3cd;border:2px dashed #ffc107;}
+        #table-container table{border-collapse:collapse;width:100%;margin-top:1em;box-shadow:0 4px 10px #0001;border-radius:8px;overflow:hidden;}
+        #table-container th,#table-container td{border:1px solid #e9ecef;padding:12px 14px;text-align:left;vertical-align:middle;}
+        #table-container thead{background:#007bff;color:#fff;}
+        #table-container tbody tr:nth-child(even){background:#f8f9fa;}
+        #table-container tbody tr:hover{background:#e9ecef;}
+        #table-container td:not(:first-child){text-align:right;}
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>基金資料彙總報告產生器 (v7 - 預覽 + 動態設定)</h1>
-        
-        <input type="file" id="file-input" multiple accept=".xlsx, .xls" style="display: none;">
-        <div id="drop-zone">
-            <p>拖曳 Excel 檔案至此</p>
-            <span>或點擊此處選擇檔案</span>
+<div class="container">
+    <h1>Excel多檔彙整工具（動態範圍+自訂欄位+合併儲存格友善）</h1>
+    <input type="file" id="file-input" multiple accept=".xlsx,.xls" style="display: none;">
+    <div id="drop-zone"><p>拖曳 Excel 檔案至此</p><span>或點擊此處選擇</span></div>
+    <div id="progress-container" style="display:none;"><div id="progress-bar"></div><span id="progress-text">0%</span></div>
+    <div class="controls">
+        <div class="control-group"><button id="preview-btn" disabled>預覽第一個檔案</button></div>
+        <div class="control-group">
+            <label>標頭列(Row):</label>
+            <input type="number" id="header-row-input" value="5" min="1" disabled>
         </div>
-
-        <div class="controls">
-            <div class="control-row">
-                 <div class="control-group">
-                    <button id="preview-btn" disabled>預覽第一個檔案</button>
-                 </div>
-                 <div class="control-group">
-                    <label>標頭列 (Row)：</label>
-                    <input type="number" id="header-row-input" value="5" min="1" disabled>
-                 </div>
-                <div class="control-group">
-                    <label>資料起始：</label>
-                    <select id="start-col-select" disabled></select>
-                    <input type="number" id="start-row-input" value="6" min="1" disabled>
-                </div>
-                <div class="control-group">
-                    <label>資料結束：</label>
-                    <select id="end-col-select" disabled></select>
-                    <input type="number" id="end-row-input" value="63" min="1" disabled>
-                </div>
-                <button id="process-btn" disabled style="margin-left: auto;">開始處理</button>
-            </div>
-            
-            <hr style="border: none; border-top: 1px solid #e0e0e0; width: 100%; margin: 10px 0;">
-
-            <div class="control-row">
-                 <div class="control-group">
-                    <label>檢視模式：</label>
-                    <div class="mode-selector">
-                        <input type="radio" id="mode-individual" name="view-mode" value="individual" checked>
-                        <label for="mode-individual">個別摘要</label>
-                        <input type="radio" id="mode-sum" name="view-mode" value="sum">
-                        <label for="mode-sum">所有檔案加總</label>
-                        <input type="radio" id="mode-compare" name="view-mode" value="compare">
-                        <label for="mode-compare">單項比較</label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="control-row">
-                <div class="control-group" id="fund-select-group">
-                    <label for="fund-select">選擇檔案：</label>
-                    <select id="fund-select" disabled></select>
-                </div>
-                <div class="control-group" id="item-select-group" style="display: none;">
-                    <label for="item-select">選擇項目：</label>
-                    <select id="item-select" disabled></select>
-                </div>
-                 <button id="download-html-btn" disabled>產生並下載HTML報告</button>
-                 <button id="download-json-btn" disabled>匯出JSON檔</button>
-            </div>
-
-            <hr style="border: none; border-top: 1px solid #e0e0e0; width: 100%; margin: 10px 0;">
-            <div class="control-row" style="flex-wrap: wrap; gap: 25px;">
-                 <label style="width: 100%; font-weight: bold; color: #007bff;">JSON 匯出設定 (處理後填寫)</label>
-                <div class="control-group">
-                    <label for="json-item-col">"科目" 欄位：</label>
-                    <select id="json-item-col" disabled></select>
-                </div>
-                <div class="control-group">
-                    <label for="json-prev-col">"前年度決算數" 欄位：</label>
-                    <select id="json-prev-col" disabled></select>
-                </div>
-                 <div class="control-group">
-                    <label for="json-last-col">"上年度預算數" 欄位：</label>
-                    <select id="json-last-col" disabled></select>
-                </div>
-                <div class="control-group">
-                    <label for="json-current-col">"本年度預算數" 欄位：</label>
-                    <select id="json-current-col" disabled></select>
-                </div>
-            </div>
-
+        <div class="control-group">
+            <label>資料起始：</label>
+            <select id="start-col-select" disabled></select>
+            <input type="number" id="start-row-input" value="6" min="1" disabled>
         </div>
-        
-        <div id="status"></div>
-
-        <div id="preview-container"></div>
-        
-        <div id="table-container"></div>
+        <div class="control-group">
+            <label>資料結束：</label>
+            <select id="end-col-select" disabled></select>
+            <input type="number" id="end-row-input" value="63" min="1" disabled>
+        </div>
+        <button id="process-btn" disabled style="margin-left:auto;">開始處理</button>
     </div>
+    <div class="controls">
+        <div class="control-group">
+            <label>檢視模式：</label>
+            <div class="mode-selector">
+                <input type="radio" id="mode-individual" name="view-mode" value="individual" checked><label for="mode-individual">個別摘要</label>
+                <input type="radio" id="mode-sum" name="view-mode" value="sum"><label for="mode-sum">所有檔案加總</label>
+                <input type="radio" id="mode-compare" name="view-mode" value="compare"><label for="mode-compare">單項比較</label>
+            </div>
+        </div>
+        <div class="control-group" id="fund-select-group"><label>選擇檔案：</label><select id="fund-select" disabled></select></div>
+        <div class="control-group" id="item-select-group" style="display:none;"><label>選擇項目：</label><select id="item-select" disabled></select></div>
+        <button id="download-html-btn" disabled>產生並下載HTML報告</button>
+        <button id="download-json-btn" disabled>匯出JSON檔</button>
+    </div>
+    <div class="controls" style="gap:22px;">
+        <label style="font-weight: bold; color: #007bff;">JSON 匯出對應設定 (處理後填寫)</label>
+        <div class="control-group"><label>"科目" 欄位：</label><select id="json-item-col" disabled></select></div>
+        <div class="control-group"><label>"前年度決算數" 欄位：</label><select id="json-prev-col" disabled></select></div>
+        <div class="control-group"><label>"上年度預算數" 欄位：</label><select id="json-last-col" disabled></select></div>
+        <div class="control-group"><label>"本年度預算數" 欄位：</label><select id="json-current-col" disabled></select></div>
+    </div>
+    <div id="status"></div>
+    <div id="preview-container"></div>
+    <div id="table-container"></div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+    // DOM & 變數
+    const dropZone=document.getElementById('drop-zone'), fileInput=document.getElementById('file-input');
+    const statusDiv=document.getElementById('status'), tableContainer=document.getElementById('table-container'), previewBtn=document.getElementById('preview-btn');
+    const previewContainer=document.getElementById('preview-container');
+    const headerRowInput=document.getElementById('header-row-input');
+    const startColSelect=document.getElementById('start-col-select'), startRowInput=document.getElementById('start-row-input');
+    const endColSelect=document.getElementById('end-col-select'), endRowInput=document.getElementById('end-row-input');
+    const processBtn=document.getElementById('process-btn');
+    const configInputs=[headerRowInput,startColSelect,startRowInput,endColSelect,endRowInput,processBtn];
+    const jsonItemCol=document.getElementById('json-item-col'),jsonPrevCol=document.getElementById('json-prev-col'),jsonLastCol=document.getElementById('json-last-col'),jsonCurrentCol=document.getElementById('json-current-col');
+    const jsonSelects=[jsonItemCol,jsonPrevCol,jsonLastCol,jsonCurrentCol];
+    const modeRadios = document.querySelectorAll('input[name="view-mode"]');
+    const fundSelect=document.getElementById('fund-select'),itemSelect=document.getElementById('item-select');
+    const fundSelectGroup=document.getElementById('fund-select-group'),itemSelectGroup=document.getElementById('item-select-group');
+    const downloadHtmlBtn=document.getElementById('download-html-btn'),downloadJsonBtn=document.getElementById('download-json-btn');
+    const progressContainer=document.getElementById('progress-container'),progressBar=document.getElementById('progress-bar'),progressText=document.getElementById('progress-text');
 
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // --- DOM 元素 ---
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const statusDiv = document.getElementById('status');
-        const tableContainer = document.getElementById('table-container');
+    let allData=[],fundNames=[],itemNames=[],uploadedFiles=null, FIXED_HEADERS=[],ROWS_PER_FILE=0;
 
-        // --- (v7) 預覽 + 設定 DOM ---
-        const previewBtn = document.getElementById('preview-btn'); // v7 新增
-        const previewContainer = document.getElementById('preview-container'); // v7 新增
-        const headerRowInput = document.getElementById('header-row-input'); 
-        const startColSelect = document.getElementById('start-col-select');
-        const startRowInput = document.getElementById('start-row-input');
-        const endColSelect = document.getElementById('end-col-select');
-        const endRowInput = document.getElementById('end-row-input');
-        const processBtn = document.getElementById('process-btn');
-        const configInputs = [headerRowInput, startColSelect, startRowInput, endColSelect, endRowInput, processBtn];
-        
-        // --- (v6) JSON 對應 DOM ---
-        const jsonItemCol = document.getElementById('json-item-col');
-        const jsonPrevCol = document.getElementById('json-prev-col');
-        const jsonLastCol = document.getElementById('json-last-col');
-        const jsonCurrentCol = document.getElementById('json-current-col');
-        const jsonSelects = [jsonItemCol, jsonPrevCol, jsonLastCol, jsonCurrentCol];
-
-        // 檢視模式 & 下拉選單
-        const modeRadios = document.querySelectorAll('input[name="view-mode"]');
-        const fundSelect = document.getElementById('fund-select');
-        const itemSelect = document.getElementById('item-select');
-        const fundSelectGroup = document.getElementById('fund-select-group');
-        const itemSelectGroup = document.getElementById('item-select-group');
-        
-        // 匯出按鈕
-        const downloadHtmlBtn = document.getElementById('download-html-btn');
-        const downloadJsonBtn = document.getElementById('download-json-btn');
-
-        // --- 全域變數 ---
-        let allData = []; 
-        let fundNames = []; 
-        let itemNames = [];
-        let uploadedFiles = null; 
-        
-        let FIXED_HEADERS = [];
-        let ROWS_PER_FILE = 0; 
-
-        // --- 填充 A-Z 下拉選單 ---
-        function populateColumnSelects() {
-            const selects = [startColSelect, endColSelect];
-            selects.forEach(select => {
-                select.innerHTML = '';
-                for (let i = 0; i < 26; i++) {
-                    const colLetter = String.fromCharCode(65 + i); // 'A'
-                    const option = document.createElement('option');
-                    option.value = colLetter;
-                    option.textContent = colLetter;
-                    select.appendChild(option);
-                }
-            });
-            startColSelect.value = 'A';
-            endColSelect.value = 'I';
+    function populateColumnSelects(){
+        for(const sel of [startColSelect,endColSelect]){
+            sel.innerHTML='';
+            for(let i=0;i<26;i++) {
+                const col=String.fromCharCode(65+i);
+                const op=document.createElement('option');op.value=col;op.textContent=col; sel.appendChild(op);}
         }
-        
-        // --- 設定事件監聽 ---
-        dropZone.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
-        
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => dropZone.addEventListener(eventName, preventDefaults, false));
-        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
-        ['dragenter', 'dragover'].forEach(eventName => dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'), false));
-        ['dragleave', 'drop'].forEach(eventName => dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'), false));
-        dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
-        
-        fundSelect.addEventListener('change', refreshTable);
-        itemSelect.addEventListener('change', refreshTable);
-        modeRadios.forEach(radio => radio.addEventListener('change', refreshTable));
-        downloadHtmlBtn.addEventListener('click', generateAndDownloadHtml);
-        downloadJsonBtn.addEventListener('click', generateAndDownloadJson);
+        startColSelect.value='A'; endColSelect.value='I';
+    }
+    function saveSettings(){
+        localStorage.setItem('excelMergeSettings',JSON.stringify({
+            headerRow:headerRowInput.value,
+            startCol:startColSelect.value, startRow:startRowInput.value,
+            endCol:endColSelect.value, endRow:endRowInput.value
+        }));
+    }
+    function loadSettings(){
+        try{
+            const s=JSON.parse(localStorage.getItem('excelMergeSettings'));
+            if(!s)return;
+            headerRowInput.value=s.headerRow||5; startColSelect.value=s.startCol||'A';
+            startRowInput.value=s.startRow||6; endColSelect.value=s.endCol||'I';endRowInput.value=s.endRow||63;
+        }catch{}
+    }
+    // 初始
+    populateColumnSelects(); loadSettings();
+    dropZone.addEventListener('click',()=>fileInput.click());
+    fileInput.addEventListener('change',e=>handleFiles(e.target.files));
+    ['dragenter','dragover','dragleave','drop'].forEach(ev=>dropZone.addEventListener(ev,preventDefaults,false));
+    function preventDefaults(e){e.preventDefault();e.stopPropagation();}
+    ['dragenter','dragover'].forEach(ev=>dropZone.addEventListener(ev,()=>dropZone.classList.add('drag-over'),false));
+    ['dragleave','drop'].forEach(ev=>dropZone.addEventListener(ev,()=>dropZone.classList.remove('drag-over'),false));
+    dropZone.addEventListener('drop',e=>handleFiles(e.dataTransfer.files));
+    fundSelect.addEventListener('change',refreshTable); itemSelect.addEventListener('change',refreshTable);
+    modeRadios.forEach(radio=>radio.addEventListener('change',refreshTable));
+    downloadHtmlBtn.addEventListener('click',generateAndDownloadHtml); downloadJsonBtn.addEventListener('click',generateAndDownloadJson);
+    previewBtn.addEventListener('click',generatePreview); processBtn.addEventListener('click',startProcessing);
 
-        previewBtn.addEventListener('click', generatePreview); // *** v7 ***
-        processBtn.addEventListener('click', startProcessing);
+    function handleFiles(files){
+        if(!files||!files.length)return;
+        if([...files].some(f=>f.size>10*1024*1024)){alert('有檔案超過10MB，請分批處理或減少欄列數！');return;}
+        uploadedFiles=files;
+        resetUI(false);
+        previewContainer.innerHTML='';
+        statusDiv.textContent=`已選擇 ${files.length} 個檔案。請點擊預覽。`;
+        previewBtn.disabled=false;
+    }
 
-        // --- 立即執行 ---
-        populateColumnSelects(); // 頁面載入時填充 A-Z 選單
-
-        // --- 主要功能函式 ---
-
-        /**
-         * *** 修改點 (3) ***
-         * `handleFiles` (v7) - 僅啟用預覽按鈕
-         */
-        function handleFiles(files) {
-            if (!files || files.length === 0) return;
-            
-            uploadedFiles = files;
-            
-            resetUI(false); 
-            previewContainer.innerHTML = ''; // 清除舊預覽
-            statusDiv.textContent = `已選擇 ${files.length} 個檔案。請點擊預覽。`;
-            
-            // 啟用預覽按鈕
-            previewBtn.disabled = false;
-        }
-
-        /**
-         * *** 新函式 (A) ***
-         * `generatePreview` (來自 v3)
-         * 產生第一個檔案的預覽
-         */
-        async function generatePreview() {
-            if (!uploadedFiles || uploadedFiles.length === 0) {
-                alert("請先上傳檔案。");
-                return;
-            }
-
-            previewBtn.disabled = true;
-            statusDiv.textContent = "正在產生預覽...";
-            previewContainer.innerHTML = ''; // 清空
-
-            try {
-                const firstFile = uploadedFiles[0];
-                const workbook = await readFileAsWorkbook(firstFile);
-                const firstSheetName = workbook.SheetNames[0];
-                const sheet = workbook.Sheets[firstSheetName];
-
-                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-
-                const maxRows = Math.min(rows.length, 100);
-                const maxCols = Math.min(Math.max(26, ...rows.map(r => r ? r.length : 0)), 50); // 最多 50 欄
-
-                let html = '<table>';
-
-                // 1. 建立標頭列 (A, B, C...)
-                html += '<thead><tr><th></th>'; // 左上角空格
-                for (let j = 0; j < maxCols; j++) {
-                    html += '<th>' + XLSX.utils.encode_col(j) + '</th>';
-                }
-                html += '</tr></thead>';
-
-                // 2. 建立資料列 (1, 2, 3...)
-                html += '<tbody>';
-                for (let i = 0; i < maxRows; i++) {
-                    html += '<tr><th>' + (i + 1) + '</th>'; // 行號
-                    const row = rows[i] || [];
-                    for (let j = 0; j < maxCols; j++) {
-                        const cellValue = row[j] != null ? row[j] : '';
-                        html += '<td>' + escapeHTML(cellValue) + '</td>';
+    async function generatePreview(){
+        if(!uploadedFiles||!uploadedFiles.length){alert('請先上傳檔案');return;}
+        previewBtn.disabled=true; statusDiv.textContent="正在產生預覽..."; previewContainer.innerHTML='';
+        try{
+            const workbook=await readFileAsWorkbook(uploadedFiles[0]);
+            const firstSheetName=workbook.SheetNames[0],sheet=workbook.Sheets[firstSheetName];
+            const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null});
+            const maxRows=Math.min(rows.length,100),maxCols=Math.min(Math.max(26,...rows.map(r=>r?r.length:0)),50);
+            let html='<table><thead><tr><th></th>';
+            for(let j=0;j<maxCols;j++) html+=`<th>${XLSX.utils.encode_col(j)}</th>`;
+            html+='</tr></thead><tbody>';
+            let merges=(sheet['!merges']||[]).map(range=>({s:range.s,e:range.e}));
+            for(let i=0;i<maxRows;i++){
+                html+=`<tr><th>${i+1}</th>`;
+                const row=rows[i]||[];
+                for(let j=0;j<maxCols;j++){
+                    let cellValue=row[j]!=null?row[j]:'';
+                    // 預覽加強：合併儲存格視覺提示
+                    let mergedClass='';
+                    let isMerged=false;
+                    for(const m of merges){
+                        if(i>=m.s.r&&i<=m.e.r&&j>=m.s.c&&j<=m.e.c){isMerged=true;break;}
                     }
-                    html += '</tr>';
+                    if(isMerged)mergedClass='potential-merged';
+                    html+=`<td class="${mergedClass}">${escapeHTML(cellValue)}</td>`;
                 }
-                html += '</tbody></table>';
-
-                previewContainer.innerHTML = html;
-                statusDiv.textContent = "預覽完成。請查看預覽，在上方填寫「標頭列」與「資料範圍」後點擊處理。";
-                
-                // *** v7 核心 ***
-                // 啟用 v6 的所有設定輸入框
-                configInputs.forEach(input => input.disabled = false);
-
-            } catch (err) {
-                statusDiv.textContent = `產生預覽失敗：${err.message}`;
-                previewBtn.disabled = false; // 允許重試
+                html+='</tr>';
             }
+            html+='</tbody></table>';
+            previewContainer.innerHTML=html;
+            statusDiv.textContent="預覽完成。請調整設定後點擊處理。";
+            configInputs.forEach(i=>i.disabled=false);
+        }catch(err){
+            statusDiv.textContent=`產生預覽失敗: ${err.message}`; previewBtn.disabled=false;
         }
-        
-        // (來自 v3) 輔助函式：防止 XSS
-        function escapeHTML(str) {
-            if (typeof str !== 'string') return str;
-            return str.replace(/[&<>"']/g, function(match) {
-                return {
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    '"': '&quot;',
-                    "'": '&#39;'
-                }[match];
-            });
-        }
+    }
 
-        /**
-         * (v6) `startProcessing` - 幾乎不變
-         */
-        async function startProcessing() {
-            if (!uploadedFiles || uploadedFiles.length === 0) {
-                alert("請先上傳檔案。");
-                return;
-            }
+    function escapeHTML(str){if(typeof str!=='string')return str; return str.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+    async function startProcessing(){
+        if(!uploadedFiles||!uploadedFiles.length){alert('請先上傳檔案');return;}
+        // 讀取UI設定
+        const headerRow=+headerRowInput.value, startCol=startColSelect.value, startRow=+startRowInput.value, endCol=endColSelect.value, endRow=+endRowInput.value;
+        saveSettings();
+        // 驗證
+        if(isNaN(headerRow)||headerRow<=0){alert("請輸入有效標頭列數字！");return;}
+        if(isNaN(startRow)||isNaN(endRow)||startRow<=headerRow||endRow<startRow){alert("資料起始列必須大於標頭列，且小於等於結束列");return;}
+        const startColIdx=XLSX.utils.decode_col(startCol),endColIdx=XLSX.utils.decode_col(endCol);
+        if(endColIdx<startColIdx){alert("結束欄必須在起始欄之後！");return;}
+        // 初始化
+        resetUI(false); statusDiv.textContent='處理中... 讀取標頭列';
+        const dataRange=`${startCol}${startRow}:${endCol}${endRow}`, headerRange=`${startCol}${headerRow}:${endCol}${headerRow}`;
+        previewBtn.disabled=true; configInputs.forEach(i=>i.disabled=true);
+        progressBar.style.width="0%";progressText.textContent="0%";progressContainer.style.display='block';
 
-            // 1. 從 UI 獲取所有範圍設定
-            const headerRow = parseInt(headerRowInput.value, 10);
-            const startCol = startColSelect.value;
-            const startRow = parseInt(startRowInput.value, 10);
-            const endCol = endColSelect.value;
-            const endRow = parseInt(endRowInput.value, 10);
-
-            // 2. 驗證範圍
-            if (isNaN(headerRow) || headerRow <= 0) {
-                alert("請輸入有效的標頭列編號！");
-                return;
-            }
-            if (isNaN(startRow) || isNaN(endRow) || startRow <= headerRow || endRow < startRow) {
-                alert("請輸入有效的資料起始/結束列數！(資料起始列必須 > 標頭列)");
-                return;
-            }
-            const startColIndex = XLSX.utils.decode_col(startCol);
-            const endColIndex = XLSX.utils.decode_col(endCol);
-            if (endColIndex < startColIndex) {
-                alert("結束欄位必須在起始欄位之後！");
-                return;
-            }
-
-            // 3. 重置 UI 並開始處理
-            resetUI(false); // 只重置表格
-            statusDiv.textContent = `處理中... 正在讀取第一個檔案的標頭...`;
-            previewBtn.disabled = true; // 處理中禁用預覽
-            configInputs.forEach(input => input.disabled = true); // 禁用設定
-
-            const dataRange = `${startCol}${startRow}:${endCol}${endRow}`;
-            const headerRange = `${startCol}${headerRow}:${endCol}${headerRow}`; // e.g., A5:I5
-
-            try {
-                // 4. 動態讀取標頭 (從第一個檔案)
-                const firstFile = uploadedFiles[0];
-                const workbook = await readFileAsWorkbook(firstFile);
-                const firstSheetName = workbook.SheetNames[0];
-                const mainSheet = workbook.Sheets[firstSheetName];
-
-                const headerData = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: headerRange, defval: null });
-                
-                if (!headerData || headerData.length === 0 || !headerData[0]) {
-                     throw new Error(`在 ${headerRange} 範圍內找不到標頭資料。`);
-                }
-
-                // 5. 設定全域變數
-                FIXED_HEADERS = headerData[0].map(h => h ? String(h).trim() : `(空欄位 ${headerRange})`);
-                ROWS_PER_FILE = endRow - startRow + 1;
-
-                // 6. (v6) 填充 JSON 下拉選單
-                populateJsonSelects(FIXED_HEADERS);
-                jsonSelects.forEach(s => s.disabled = false);
-
-            } catch (error) {
-                statusDiv.textContent = `讀取標頭時發生錯誤：${error.message}`;
-                console.error(error);
-                // 恢復啟用
-                previewBtn.disabled = false;
-                configInputs.forEach(input => input.disabled = false);
-                return;
-            }
-
-
-            // 7. 標頭讀取成功，開始處理所有檔案
-            statusDiv.textContent = `標頭讀取完成。正在處理 ${uploadedFiles.length} 個檔案...`;
-            const filePromises = Array.from(uploadedFiles).map(file => processFile(file, dataRange));
-
-            Promise.all(filePromises)
-                .then(() => {
-                    fundNames.sort();
-                    itemNames.sort();
-                    statusDiv.textContent = `處理完成！共 ${fundNames.length} 個檔案。`;
-                    populateDropdowns();
-                    if (allData.length > 0) {
-                        refreshTable();
-                        downloadHtmlBtn.disabled = false;
-                        downloadJsonBtn.disabled = false;
-                    }
-                    // 恢復啟用
-                    previewBtn.disabled = false; 
-                    configInputs.forEach(input => input.disabled = false);
-                })
-                .catch(error => {
-                    statusDiv.textContent = `處理檔案時發生錯誤：${error.message}`;
-                    console.error(error);
-                    // 恢復啟用
-                    previewBtn.disabled = false;
-                    configInputs.forEach(input => input.disabled = false);
-                });
-        }
-        
-        /**
-         * (v6) `processFile` - 不需改動
-         */
-        function processFile(file, dataRange) {
-             return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const workbook = XLSX.read(e.target.result, { type: 'array' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const mainSheet = workbook.Sheets[firstSheetName];
-                        
-                        const fileExtensionRegex = /\.(xlsx|xls)$/i;
-                        const fundName = file.name.replace(fileExtensionRegex, "").trim();
-
-                        if (!fundNames.includes(fundName)) fundNames.push(fundName);
-
-                        const rows = XLSX.utils.sheet_to_json(mainSheet, { header: 1, range: dataRange, defval: null });
-
-                        const records = rows.map(rowArray => {
-                            const record = { '檔案名稱': fundName }; 
-                            FIXED_HEADERS.forEach((header, index) => {
-                                record[header] = rowArray[index];
-                            });
-                            const itemName = record[FIXED_HEADERS[0]]; 
-                            if (itemName && !itemNames.includes(itemName)) {
-                                itemNames.push(itemName);
-                            }
-                            return record;
-                        });
-                        
-                        allData.push(...records);
-                        resolve();
-                    } catch (err) {
-                        reject(new Error(`解析 ${file.name} 失敗 (範圍 ${dataRange}): ${err.message}`));
-                    }
-                };
-                reader.onerror = () => reject(new Error(`讀取 ${file.name} 失敗`));
-                reader.readAsArrayBuffer(file);
-            });
-        }
-        
-        /**
-         * (v6) `readFileAsWorkbook` - 輔助函式
-         */
-        function readFileAsWorkbook(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const workbook = XLSX.read(e.target.result, { type: 'array' });
-                        resolve(workbook);
-                    } catch (err) {
-                        reject(new Error(`解析 ${file.name} 失敗: ${err.message}`));
-                    }
-                };
-                reader.onerror = () => reject(new Error(`讀取 ${file.name} 失敗`));
-                reader.readAsArrayBuffer(file);
-            });
+        try{
+            const firstFile=uploadedFiles[0];
+            const workbook=await readFileAsWorkbook(firstFile);
+            const firstSheetName=workbook.SheetNames[0],mainSheet=workbook.Sheets[firstSheetName];
+            const headerData=XLSX.utils.sheet_to_json(mainSheet,{header:1,range:headerRange,defval:null});
+            if(!headerData||!headerData.length||!headerData[0]) throw Error(`【無標頭資料】請檢查標頭列位置與資料範圍。`);
+            FIXED_HEADERS=headerData[0].map(h=>h?String(h).trim():`(空)`); ROWS_PER_FILE=endRow-startRow+1;
+            populateJsonSelects(FIXED_HEADERS); jsonSelects.forEach(s=>s.disabled=false);
+        }catch(e){
+            statusDiv.textContent=`讀取標頭出錯:${e.message}`; previewBtn.disabled=false;configInputs.forEach(i=>i.disabled=false);progressContainer.style.display='none';return;
         }
 
-        /**
-         * (v6) `populateJsonSelects` - 填充 JSON 對應的下拉選單
-         */
-        function populateJsonSelects(headers) {
-            jsonSelects.forEach(select => {
-                select.innerHTML = ''; // 清空
-                // 新增一個空選項
-                const emptyOption = document.createElement('option');
-                emptyOption.value = "";
-                emptyOption.textContent = "--- 請選擇 ---";
-                select.appendChild(emptyOption);
+        // 處理多檔
+        statusDiv.textContent='標頭完成，處理所有檔案中...';
+        let processed=0;
+        const filePromises=Array.from(uploadedFiles).map((file,i)=>processFile(file,dataRange).then(()=>{ // 進度條
+            processed++;
+            const p=Math.round(100*processed/uploadedFiles.length);
+            progressBar.style.width=p+"%";progressText.textContent=p+"%";
+            statusDiv.textContent=`處理中...${processed}/${uploadedFiles.length}`;
+        }));
+        Promise.all(filePromises).then(()=>{
+            fundNames.sort();itemNames.sort();statusDiv.textContent=`處理完成，檔案數:${fundNames.length}`;
+            populateDropdowns(); if(allData.length){refreshTable(); downloadHtmlBtn.disabled=downloadJsonBtn.disabled=false;}
+            previewBtn.disabled=false; configInputs.forEach(i=>i.disabled=false);progressContainer.style.display='none';
+            // 資料檢查提醒
+            const issues=validateProcessedData();
+            if(issues.length) statusDiv.innerHTML+=`<br><span style="color:#f00;">${issues.join('<br>')}</span>`;
+        }).catch(e=>{
+            statusDiv.textContent=`處理檔案出錯:${e.message}`;previewBtn.disabled=false;configInputs.forEach(i=>i.disabled=false);progressContainer.style.display='none';
+        });
+    }
 
-                headers.forEach(header => {
-                    const option = document.createElement('option');
-                    option.value = header;
-                    option.textContent = header;
-                    select.appendChild(option);
-                });
-            });
-
-            // 嘗試根據 v4/v5 的假設設定預設值
-            try {
-                if (headers.includes(headers[0])) jsonItemCol.value = headers[0];
-                if (headers.includes(headers[1])) jsonPrevCol.value = headers[1];
-                if (headers.includes(headers[2])) jsonLastCol.value = headers[2];
-                if (headers.includes(headers[7])) jsonCurrentCol.value = headers[7];
-            } catch(e) {
-                // 猜測失敗也沒關係
-                console.warn("自動猜測 JSON 欄位失敗: ", e.message);
-            }
-        }
-
-
-        /**
-         * *** 修改點 (4) ***
-         * `resetUI` - v7 修改
-         * 需重置預覽和 v6 設定
-         */
-        function resetUI(fullReset = true) {
-            allData = [];
-            fundNames = [];
-            itemNames = [];
-            [fundSelect, itemSelect, downloadHtmlBtn, downloadJsonBtn].forEach(el => el.disabled = true);
-            tableContainer.innerHTML = '';
-            
-            // 禁用 JSON 下拉選單
-            jsonSelects.forEach(s => {
-                s.innerHTML = '';
-                s.disabled = true;
-            });
-
-            if (fullReset) {
-                uploadedFiles = null;
-                fileInput.value = ''; // 清除已選擇的檔案
-                previewContainer.innerHTML = ''; // 清除預覽
-                
-                // 禁用所有 v7 輸入
-                previewBtn.disabled = true;
-                configInputs.forEach(input => input.disabled = true);
-
-                // 恢復預設值
-                headerRowInput.value = 5;
-                startColSelect.value = 'A';
-                startRowInput.value = 6;
-                endColSelect.value = 'I';
-                endRowInput.value = 63;
-            }
-        }
-        
-        // --- (v5) 後續函式 (display... / generate...) ---
-        // --- 這些函式 *完全不需要* 修改 ---
-        
-        function populateDropdowns() { /* ... (v6 程式碼不變) ... */ 
-            const populate = (selectEl, options) => {
-                const currentVal = selectEl.value;
-                selectEl.innerHTML = '';
-                if (options.length === 0) {
-                    selectEl.innerHTML = '<option>無可用選項</option>';
-                    selectEl.disabled = true;
-                    return;
-                }
-                options.forEach(name => {
-                    const option = document.createElement('option');
-                    option.value = name;
-                    option.textContent = name;
-                    selectEl.appendChild(option);
-                });
-                selectEl.value = currentVal;
-                if(selectEl.selectedIndex === -1) selectEl.selectedIndex = 0;
-                selectEl.disabled = false;
+    function readFileAsWorkbook(file){
+        return new Promise((resolve,reject)=>{
+            const reader=new FileReader();
+            reader.onload=e=>{
+                try{const workbook=XLSX.read(e.target.result,{type:'array'});resolve(workbook);}
+                catch(err){reject(Error(`解析 ${file.name} 失敗:${err.message}`));}
             };
-
-            populate(fundSelect, fundNames);
-            populate(itemSelect, itemNames);
-        }
-        function refreshTable() { /* ... (v6 程式碼不變) ... */ 
-            const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
-            if (allData.length === 0) return;
-
-            fundSelectGroup.style.display = selectedMode === 'individual' ? 'flex' : 'none';
-            itemSelectGroup.style.display = selectedMode === 'compare' ? 'flex' : 'none';
-            
-            tableContainer.innerHTML = '';
-            switch (selectedMode) {
-                case 'individual':
-                    displayIndividualFundTable(fundSelect.value);
-                    break;
-                case 'sum':
-                    displayAggregatedTable();
-                    break;
-                case 'compare':
-                    displayItemComparisonTable(itemSelect.value);
-                    break;
-            }
-        }
-        function displayIndividualFundTable(fundName) { /* ... (v6 程式碼不變) ... */ 
-            const records = allData.filter(r => r['檔案名稱'] === fundName); 
-            if (!records || records.length === 0) {
-                tableContainer.innerHTML = `<p>找不到檔案「${fundName}」的資料。</p>`;
-                return;
-            }
-            const table = createTable(FIXED_HEADERS);
-            const tbody = table.querySelector('tbody');
-            records.forEach(record => {
-                const row = document.createElement('tr');
-                FIXED_HEADERS.forEach(header => {
-                    const cell = document.createElement('td');
-                    cell.textContent = formatNumber(record[header]);
-                    row.appendChild(cell);
-                });
-                tbody.appendChild(row);
-            });
-            tableContainer.appendChild(table);
-        }
-        function displayAggregatedTable() { /* ... (v6 程式碼不變) ... */ 
-            if (!allData || allData.length === 0) {
-                tableContainer.innerHTML = `<p>沒有可加總的資料。</p>`;
-                return;
-            }
-            
-            const summaryData = [];
-            for (let i = 0; i < ROWS_PER_FILE; i++) {
-                const summaryRow = {};
-                FIXED_HEADERS.forEach((header, headerIndex) => {
-                    if (headerIndex === 0) {
-                        summaryRow[header] = allData[i]?.[header];
-                        return;
-                    }
-                    let sum = 0;
-                    fundNames.forEach((fund, fundIndex) => {
-                        const recordIndex = fundIndex * ROWS_PER_FILE + i;
-                        const value = allData[recordIndex]?.[header];
-                        if (typeof value === 'number' && !isNaN(value)) sum += value;
+            reader.onerror=()=>reject(Error(`讀取 ${file.name} 失敗`));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    function processFile(file,dataRange){
+        return new Promise((resolve,reject)=>{
+            const reader=new FileReader();
+            reader.onload=e=>{
+                try{
+                    const workbook=XLSX.read(e.target.result,{type:'array'});
+                    const firstSheet=workbook.SheetNames[0],mainSheet=workbook.Sheets[firstSheet];
+                    const fundName=file.name.replace(/\.(xlsx|xls)$/i,'').trim();
+                    if(!fundNames.includes(fundName))fundNames.push(fundName);
+                    const rows=XLSX.utils.sheet_to_json(mainSheet,{header:1,range:dataRange,defval:null});
+                    const records=rows.map(row=>{
+                        const rec={'檔案名稱':fundName};
+                        FIXED_HEADERS.forEach((head,idx)=>rec[head]=row[idx]);
+                        const itemName=rec[FIXED_HEADERS[0]];
+                        if(itemName&&!itemNames.includes(itemName))itemNames.push(itemName);
+                        return rec;
                     });
-                    summaryRow[header] = sum;
-                });
-                summaryData.push(summaryRow);
-            }
+                    allData.push(...records);resolve();
+                }catch(e){reject(Error(`解析 ${file.name} 失敗:${e.message}`));}
+            };
+            reader.onerror=()=>reject(Error(`讀取 ${file.name} 失敗`));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    function populateJsonSelects(headers){
+        jsonSelects.forEach(sel=>{
+            sel.innerHTML='';const e=document.createElement('option');
+            e.value='';e.textContent='--- 請選擇 ---';sel.appendChild(e);
+            headers.forEach(h=>{const o=document.createElement('option');o.value=h;o.textContent=h;sel.appendChild(o);});
+        });
+        // 嘗試猜測預設
+        try{
+            if(headers[0])jsonItemCol.value=headers[0];
+            if(headers[1])jsonPrevCol.value=headers[1];
+            if(headers[2])jsonLastCol.value=headers[2];
+            if(headers[7])jsonCurrentCol.value=headers[7];
+        }catch{}
+    }
+    function resetUI(full=true){
+        allData=[];fundNames=[];itemNames=[];
+        [fundSelect,itemSelect,downloadHtmlBtn,downloadJsonBtn].forEach(e=>e.disabled=true);
+        tableContainer.innerHTML='';jsonSelects.forEach(s=>{s.innerHTML='';s.disabled=true;});
+        if(full){
+            uploadedFiles=null;fileInput.value='';previewContainer.innerHTML='';
+            previewBtn.disabled=true;configInputs.forEach(i=>i.disabled=true);
+            headerRowInput.value=5;startColSelect.value='A';startRowInput.value=6;endColSelect.value='I';endRowInput.value=63;
+        }
+    }
 
-            const table = createTable(FIXED_HEADERS);
-            const tbody = table.querySelector('tbody');
-            summaryData.forEach(record => {
-                const row = document.createElement('tr');
-                FIXED_HEADERS.forEach(header => {
-                    const cell = document.createElement('td');
-                    cell.textContent = formatNumber(record[header]);
-                    row.appendChild(cell);
-                });
-                tbody.appendChild(row);
+    // ---- 資料驗證與進階UI ----
+    function validateProcessedData(){
+        const issues=[],rowCounts=fundNames.map(f=>allData.filter(r=>r['檔案名稱']==f).length);
+        if(new Set(rowCounts).size>1)issues.push(`（警告：不同檔案的資料列數不一致：${rowCounts.join(',')}）`);
+        FIXED_HEADERS.forEach((h,i)=>{
+            if(i===0)return;
+            if(!allData.some(r=>r[h]!=null&&r[h]!==''))issues.push(`（欄位${h}在所有檔案皆空）`);
+        });
+        return issues;
+    }
+
+    // ---- 下拉選單、表格UI ----
+    function populateDropdowns(){
+        const pop=(sel,opts)=>{
+            const cur=sel.value;
+            sel.innerHTML='';if(!opts.length){sel.innerHTML='<option>無可用選項</option>';sel.disabled=true;return;}
+            opts.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
+            sel.value=cur;if(sel.selectedIndex===-1)sel.selectedIndex=0;sel.disabled=false;
+        };pop(fundSelect,fundNames);pop(itemSelect,itemNames);
+    }
+    function refreshTable(){
+        const m=document.querySelector('input[name="view-mode"]:checked').value;
+        if(!allData.length)return;
+        fundSelectGroup.style.display=m==='individual'?'flex':'none';
+        itemSelectGroup.style.display=m==='compare'?'flex':'none';
+        tableContainer.innerHTML='';
+        switch(m){
+            case 'individual':displayIndividualFundTable(fundSelect.value);break;
+            case 'sum':displayAggregatedTable();break;
+            case 'compare':displayItemComparisonTable(itemSelect.value);break;
+        }
+    }
+    function displayIndividualFundTable(fund){
+        const records=allData.filter(r=>r['檔案名稱']===fund);
+        if(!records.length){tableContainer.innerHTML=`<p>無檔案「${fund}」資料</p>`;return;}
+        const t=createTable(FIXED_HEADERS),tbody=t.querySelector('tbody');
+        records.forEach(r=>{
+            const tr=document.createElement('tr');
+            FIXED_HEADERS.forEach(h=>{
+                const td=document.createElement('td');
+                td.textContent=formatNumber(r[h]);tr.appendChild(td);});
+            tbody.appendChild(tr);
+        });tableContainer.appendChild(t);
+    }
+    function displayAggregatedTable(){
+        if(!allData.length){tableContainer.innerHTML=`<p>沒可加總資料。</p>`;return;}
+        const summaryData=[];
+        for(let i=0;i<ROWS_PER_FILE;i++){
+            const row={};
+            FIXED_HEADERS.forEach((h,idx)=>{
+                if(idx===0){row[h]=allData[i]?.[h];return;}
+                let sum=0;
+                fundNames.forEach((_,fidx)=>{
+                    const recIdx=fidx*ROWS_PER_FILE+i,v=allData[recIdx]?.[h];
+                    if(typeof v==="number"&&!isNaN(v))sum+=v;
+                });row[h]=sum;
+            });summaryData.push(row);
+        }
+        const t=createTable(FIXED_HEADERS),tbody=t.querySelector('tbody');
+        summaryData.forEach(r=>{
+            const tr=document.createElement('tr');
+            FIXED_HEADERS.forEach(h=>{
+                const td=document.createElement('td');
+                td.textContent=formatNumber(r[h]);tr.appendChild(td);});
+            tbody.appendChild(tr);
+        });tableContainer.appendChild(t);
+    }
+    function displayItemComparisonTable(item){
+        if(!allData.length||!item){tableContainer.innerHTML=`<p>無法進行比較。</p>`;return;}
+        const h0=FIXED_HEADERS[0],headers=['檔案名稱',...FIXED_HEADERS.slice(1)];
+        const t=createTable(headers),tbody=t.querySelector("tbody");
+        fundNames.forEach(f=>{
+            const r=allData.find(r=>r['檔案名稱']===f&&r[h0]===item);
+            const tr=document.createElement('tr');
+            let td=document.createElement('td');td.textContent=f;tr.appendChild(td);
+            headers.slice(1).forEach(h=>{
+                td=document.createElement('td');td.textContent=formatNumber(r?r[h]:'-');tr.appendChild(td);
             });
-            tableContainer.appendChild(table);
-        }
-        function displayItemComparisonTable(itemName) { /* ... (v6 程式碼不變) ... */ 
-            if (!allData || allData.length === 0 || !itemName) {
-                tableContainer.innerHTML = `<p>無法進行項目比較。</p>`;
-                return;
-            }
-            const firstColumnHeader = FIXED_HEADERS[0];
-            const comparisonHeaders = ['檔案名稱', ...FIXED_HEADERS.slice(1)]; 
-            const table = createTable(comparisonHeaders);
-            const tbody = table.querySelector('tbody');
-
-            fundNames.forEach(fund => {
-                const itemRowData = allData.find(r => r['檔案名稱'] === fund && r[firstColumnHeader] === itemName);
-                const row = document.createElement('tr');
-                
-                let cell = document.createElement('td');
-                cell.textContent = fund;
-                row.appendChild(cell);
-
-                comparisonHeaders.slice(1).forEach(header => {
-                    cell = document.createElement('td');
-                    const value = itemRowData ? itemRowData[header] : '-';
-                    cell.textContent = formatNumber(value);
-                    row.appendChild(cell);
-                });
-                tbody.appendChild(row);
-            });
-            tableContainer.appendChild(table);
-        }
-        function createTable(headers) { /* ... (v6 程式碼不變) ... */ 
-            const table = document.createElement('table');
-            const thead = document.createElement('thead');
-            const tbody = document.createElement('tbody');
-            const headerRow = document.createElement('tr');
-            headers.forEach(headerText => {
-                const th = document.createElement('th');
-                th.textContent = headerText;
-                headerRow.appendChild(th);
-            });
-            thead.appendChild(headerRow);
-            table.appendChild(thead);
-            table.appendChild(tbody);
-            return table;
-        }
-        function formatNumber(value) { /* ... (v6 程式碼不變) ... */ 
-            if (typeof value === 'number' && !isNaN(value)) {
-                return Math.round(value).toLocaleString('en-US');
-            }
-            return value != null ? value : '';
-        }
-        function generateAndDownloadHtml() { /* ... (v6 程式碼不變) ... */ 
-            const selectedMode = document.querySelector('input[name="view-mode"]:checked').value;
-            let modeText = '';
-            let subTitle = ``;
-
-            switch (selectedMode) {
-                case 'individual':
-                    modeText = '個別檔案摘要報告'; 
-                    subTitle = `檔案：${fundSelect.value}`; 
-                    break;
-                case 'sum':
-                    modeText = '所有檔案加總報告'; 
-                    break;
-                case 'compare':
-                    modeText = '單項比較報告';
-                    subTitle = `比較項目：${itemSelect.value}`;
-                    break;
-            }
-            
-            const tableHtml = tableContainer.innerHTML;
-            if (!tableHtml || tableHtml.startsWith('<p>')) {
-                alert('沒有可匯出的資料！');
-                return;
-            }
-
-            const styles = document.querySelector('style').innerHTML;
-            const htmlContent = `
-                <!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>${modeText}</title><style>${styles}</style></head>
-                <body><div class="container"><h1>${modeText}</h1><h2>${subTitle}</h2>${tableHtml}</div></body></html>`;
-
-            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            const safeFilename = modeText.replace(/[\\/*?:"<>|]/g, '_');
-            link.download = `${safeFilename}.html`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
-        }
-
-        /**
-         * (v6) `generateAndDownloadJson` - 讀取 JSON 對應下拉選單的值
-         */
-        function generateAndDownloadJson() {
-            if (allData.length === 0) {
-                alert('沒有可匯出的資料！');
-                return;
-            }
-            
-            // *** v6 核心：從下拉選單讀取使用者指定的 "標頭名稱" ***
-            const itemHeader = jsonItemCol.value;
-            const prevYearHeader = jsonPrevCol.value;
-            const lastYearHeader = jsonLastCol.value;
-            const currentYearHeader = jsonCurrentCol.value;
-
-            // 驗證使用者是否已完成設定
-            if (!itemHeader || !prevYearHeader || !lastYearHeader || !currentYearHeader) {
-                alert("匯出 JSON 失敗：請在 'JSON 匯出設定' 中，將所有欄位都對應到讀取到的標頭！");
-                return;
-            }
-
-            const jsonData = allData.map(record => {
-                return {
-                    "基金名稱": record['檔案名稱'], // (v5)
-                    "科目": record[itemHeader],
-                    "本年度預算數": record[currentYearHeader],
-                    "上年度預算數": record[lastYearHeader],
-                    "前年度決算數": record[prevYearHeader]
-                };
-            });
-
-            const jsonString = JSON.stringify(jsonData, null, 2);
-
-            const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `基金資料匯出_${new Date().toISOString().slice(0,10)}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
-        }
-    });
-    </script>
+            tbody.appendChild(tr);
+        });tableContainer.appendChild(t);
+    }
+    function createTable(headers){
+        const t=document.createElement('table'),thead=document.createElement('thead'),tbody=document.createElement('tbody'),tr=document.createElement('tr');
+        headers.forEach(h=>{const th=document.createElement('th');th.textContent=h;tr.appendChild(th);});thead.appendChild(tr);
+        t.appendChild(thead);t.appendChild(tbody);return t;
+    }
+    function formatNumber(val){return(typeof val==="number"&&!isNaN(val))?Math.round(val).toLocaleString("en-US"):val??'';}
+    function generateAndDownloadHtml(){
+        const m=document.querySelector('input[name="view-mode"]:checked').value;
+        let modeText='',subTitle='';
+        switch(m){
+            case 'individual':modeText='個別檔案摘要報告';subTitle=`檔案:${fundSelect.value}`;break;
+            case 'sum':modeText='所有檔案加總報告';break;
+            case 'compare':modeText='單項比較報告';subTitle=`比較項目:${itemSelect.value}`;break;}
+        const htmlNow=tableContainer.innerHTML;if(!htmlNow||htmlNow.startsWith('<p>')){alert('沒有可匯出的資料！');return;}
+        const styles=document.querySelector('style').innerHTML;
+        const hContent=`<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>${modeText}</title><style>${styles}</style></head>`+
+            `<body><div class="container"><h1>${modeText}</h1><h2>${subTitle}</h2>${htmlNow}</div></body></html>`;
+        const blob=new Blob([hContent],{type:'text/html;charset=utf-8'});
+        const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+        a.download=`${modeText.replace(/[\\/*?:"<>|]/g,'_')}.html`;
+        document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
+    }
+    function generateAndDownloadJson(){
+        if(!allData.length){alert('沒有可匯出的資料!');return;}
+        const itemHeader=jsonItemCol.value,prevYearHeader=jsonPrevCol.value,lastYearHeader=jsonLastCol.value,currentYearHeader=jsonCurrentCol.value;
+        if(!(itemHeader&&prevYearHeader&&lastYearHeader&&currentYearHeader)){alert('請將所有JSON欄位對應好！');return;}
+        const jsonData=allData.map(r=>({
+            "基金名稱":r['檔案名稱'],
+            "科目":r[itemHeader],
+            "本年度預算數":r[currentYearHeader],
+            "上年度預算數":r[lastYearHeader],
+            "前年度決算數":r[prevYearHeader]
+        }));
+        const blob=new Blob([JSON.stringify(jsonData,null,2)],{type:'application/json;charset=utf-8'});
+        const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`基金資料匯出_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
+    }
+});
+</script>
 </body>
 </html>
