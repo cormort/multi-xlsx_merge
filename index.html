@@ -2,446 +2,391 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Excel彙總工具-動態範圍/自訂欄位/多檔合併儲存格友善</title>
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基金資料彙總報告產生器 (v9.1-opt)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body {
-            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Microsoft JhengHei,Roboto,"Helvetica Neue",Arial,sans-serif;
-            background: #f5f7fa;
-            margin: 0;
-            padding: 2.5em;
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+            line-height: 1.6; background: #f4f7f6; color: #333; padding:20px; max-width:1200px; margin:0 auto;
         }
-        .container {
-            margin: auto; background: #fff; border-radius: 12px; padding: 2em 2.5em;
-            box-shadow: 0 8px 24px rgba(0,0,0,.07);
-            max-width: 1250px;
-        }
-        h1 {margin-top:0;color:#1a2c4e;border-bottom:2px solid #007bff;padding-bottom:12px;}
-        #drop-zone {
-            border: 3px dashed #c0cdda; border-radius: 10px; background: #fcfdff;
-            color: #8a9bb3; padding: 42px 22px; text-align: center; font-size: 1.2em;
-            margin-bottom: 2em; cursor:pointer;
-            transition: all .3s;
-        }
-        #drop-zone.drag-over { border-color:#007bff; background:#e6f2ff; color:#0056b3; }
-        .controls { margin-bottom: 2.2em; background:#f8f9fa; border-radius: 8px; padding:1.5em; display: flex;gap:18px;flex-wrap:wrap;}
-        .control-group{display:flex;align-items:center;gap:10px;}
-        label { font-size:1.07em; font-weight:500;}
-        select,button,input[type="number"],input[type="text"]{
-            border-radius:6px; border:1px solid #ced4da; padding:11px; font-size:1em;
-        }
-        select,button{cursor:pointer;}
-        button {background:#28a745; color:white; font-weight: 500;}
-        button:disabled {background:#c0cdda;color:#fff;}
-        #process-btn {background:#fd7e14}
-        #preview-btn {background:#17a2b8;}
-        #download-html-btn {background:#007bff}
-        #download-json-btn {background:#6f42c1}
-        .mode-selector {display:flex;background:#e9ecef; border-radius:6px; padding:3px;}
-        .mode-selector input[type="radio"]{display:none;}
-        .mode-selector label {padding:7px 15px; border-radius:4px; cursor:pointer;}
-        .mode-selector input:checked + label {background:#007bff;color:#fff;}
-        #status{font-weight:600;color:#555;margin-bottom:1.2em;}
-        #progress-container{height:24px;background:#e5e9f2;border-radius:8px;overflow:hidden;margin-bottom:8px;}
-        #progress-bar{height:100%;background:#007bff;width:0%;transition: width .25s;}
+        h1,h2,h3{color:#0056b3;}
+        h2{border-bottom:2px solid #e0e0e0; padding-bottom:5px;}
+        #app-container{background:#fff;border-radius:8px;box-shadow:0 4px 12px #0001;padding:25px;}
+        .config-section,.preview-section,.mapping-section,.output-section{margin-bottom:30px;}
+        #drop-area{border:2px dashed #007bff;border-radius:8px;padding:40px;text-align:center;background:#f8faff;color:#0056b3;font-size:1.1em;cursor:pointer;transition:.3s;}
+        #drop-area:hover{background:#e6f0ff;} #drop-area.minimized{padding:15px;font-size:.95em;}
+        #file-input{display:none;} #file-list-display{list-style:none;padding:0;margin-top:10px;}
+        #file-list-display li{font-size:.9em;color:#555;}
+        #preview-area{max-height:400px;overflow:auto;border:1px solid #ddd;border-radius:5px;background:#fafafa;margin-top:15px;}
+        #preview-area table,.report-table{width:100%;border-collapse:collapse;font-size:.9em;}
+        #preview-area th,#preview-area td,.report-table th,.report-table td{border:1px solid #ccc;padding:6px 8px;min-width:80px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        #preview-area thead th,.report-table thead th{position:-webkit-sticky;position:sticky;top:0;background:#e9ecef;z-index:10;}
+        #preview-area tbody th,.report-table tbody th{position:-webkit-sticky;position:sticky;left:0;background:#f1f3f5;z-index:5;}
+        #preview-area thead th:first-child,.report-table thead th:first-child{left:0;z-index:20;background:#e0e0e0;}
+        .omitted-row-cell{text-align:center;color:#777;font-style:italic;background:#f9f9f9;}
+        .report-table td.number{text-align:right;font-family:monospace;}
+        .input-group{margin-top:15px;}
+        .input-group label{display:block;font-weight:bold;margin-bottom:5px;color:#555;}
+        .input-group input[type="text"],.input-group input[type="number"],.input-group select{width:100%;max-width:300px;padding:8px 10px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;}
+        button{background:#007bff;color:#fff;border:none;padding:10px 18px;border-radius:5px;cursor:pointer;font-size:1em;font-weight:500;transition:.2s;margin-right:10px;}
+        button:hover{background:#0056b3;}
+        button:disabled{background:#c0c0c0;cursor:not-allowed;}
+        #load-headers-btn{background:#28a745;} #load-headers-btn:hover{background:#218838;}
+        #mapping-fields{display:none;padding-top:15px;}
+        .value-field-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+        .value-field-row select,.value-field-row input{width:auto;flex:1;padding:8px 10px;border:1px solid #ccc;border-radius:4px;}
+        .value-field-row button{padding:5px 10px;background:#dc3545;font-size:.9em;flex-shrink:0;}
+        #add-value-field-btn{background:#17a2b8;}
+        .output-section{display:none;}
+        .view-tabs{border-bottom:2px solid #dee2e6;margin-bottom:15px;}
+        .tab-btn{background:transparent;color:#0056b3;border:none;padding:10px 15px;cursor:pointer;font-size:1.1em;margin-right:5px;border-radius:5px 5px 0 0;transition:.2s;}
+        .tab-btn:hover{background:#e6f0ff;}
+        .tab-btn.active{background:#0056b3;color:#fff;} .view-pane{display:none;padding:10px;}
+        .view-pane.active{display:block;} #item-view select{font-size:1.1em;padding:8px;margin-bottom:15px;}
+        #individual-view .individual-report{margin-bottom:30px;border-bottom:2px solid #0056b3;padding-bottom:15px;}
+        /* 合併儲存格高亮 */
+        .merge-hint{background:#fff3cd;border:2px dashed #ffc107;}
+        .text-center{text-align:center;}
+        .text-muted{color:#888;}
+        /* 進度條 */
+        #progress-container{height:22px;background:#e5e9f2;border-radius:8px;overflow:hidden;margin-bottom:8px;display:none;}
+        #progress-bar{height:100%;background:#007bff;width:0%;transition:.25s;}
         #progress-text{margin-left:8px;}
-        #preview-container{max-height:340px;overflow:auto;border:1px solid #ced4da;border-radius:8px;margin-bottom: 1.3em;}
-        #preview-container table {border-collapse:collapse;width:100%;font-size:.93em;}
-        #preview-container th,#preview-container td{border:1px solid #e0e0e0; padding:7px 10px; white-space:nowrap;}
-        #preview-container .potential-merged {background:#fff3cd;border:2px dashed #ffc107;}
-        #table-container table{border-collapse:collapse;width:100%;margin-top:1em;box-shadow:0 4px 10px #0001;border-radius:8px;overflow:hidden;}
-        #table-container th,#table-container td{border:1px solid #e9ecef;padding:12px 14px;text-align:left;vertical-align:middle;}
-        #table-container thead{background:#007bff;color:#fff;}
-        #table-container tbody tr:nth-child(even){background:#f8f9fa;}
-        #table-container tbody tr:hover{background:#e9ecef;}
-        #table-container td:not(:first-child){text-align:right;}
     </style>
 </head>
 <body>
-<div class="container">
-    <h1>Excel多檔彙整工具（動態範圍+自訂欄位+合併儲存格友善）</h1>
-    <input type="file" id="file-input" multiple accept=".xlsx,.xls" style="display: none;">
-    <div id="drop-zone"><p>拖曳 Excel 檔案至此</p><span>或點擊此處選擇</span></div>
-    <div id="progress-container" style="display:none;"><div id="progress-bar"></div><span id="progress-text">0%</span></div>
-    <div class="controls">
-        <div class="control-group"><button id="preview-btn" disabled>預覽第一個檔案</button></div>
-        <div class="control-group">
-            <label>標頭列(Row):</label>
-            <input type="number" id="header-row-input" value="5" min="1" disabled>
+<div id="app-container">
+    <h1>基金資料彙總報告產生器 (v9.1-opt)</h1>
+    <div class="config-section">
+        <h2>1. 上傳多個檔案</h2>
+        <div id="drop-area">拖曳 <b>多個</b> Excel 檔案至此，或點擊此處選擇檔案
+            <input type="file" id="file-input" accept=".xlsx,.xls" multiple>
         </div>
-        <div class="control-group">
-            <label>資料起始：</label>
-            <select id="start-col-select" disabled></select>
-            <input type="number" id="start-row-input" value="6" min="1" disabled>
-        </div>
-        <div class="control-group">
-            <label>資料結束：</label>
-            <select id="end-col-select" disabled></select>
-            <input type="number" id="end-row-input" value="63" min="1" disabled>
-        </div>
-        <button id="process-btn" disabled style="margin-left:auto;">開始處理</button>
+        <ul id="file-list-display"></ul>
+        <div id="progress-container"><div id="progress-bar"></div><span id="progress-text">0%</span></div>
     </div>
-    <div class="controls">
-        <div class="control-group">
-            <label>檢視模式：</label>
-            <div class="mode-selector">
-                <input type="radio" id="mode-individual" name="view-mode" value="individual" checked><label for="mode-individual">個別摘要</label>
-                <input type="radio" id="mode-sum" name="view-mode" value="sum"><label for="mode-sum">所有檔案加總</label>
-                <input type="radio" id="mode-compare" name="view-mode" value="compare"><label for="mode-compare">單項比較</label>
+    <div class="preview-section">
+        <h2>2. 檔案預覽 (僅顯示第一個檔案)</h2>
+        <div id="preview-area"><p style="padding:20px;text-align:center;color:#777;">尚未載入檔案</p></div>
+    </div>
+    <div class="config-section">
+        <h2>3. 設定資料範圍與標頭 (將套用至所有檔案)</h2>
+        <div class="input-group">
+            <label for="data-range">資料範圍 (不含標頭)</label>
+            <input type="text" id="data-range" placeholder="例如: A6:G50">
+        </div>
+        <div class="input-group">
+            <label for="header-row">標頭列號 (絕對列號)</label>
+            <input type="number" id="header-row" placeholder="例如: 5">
+        </div>
+        <div class="input-group">
+            <button id="load-headers-btn" disabled>讀取標頭</button>
+        </div>
+    </div>
+    <div class="mapping-section">
+        <h2>4. 對應欄位</h2>
+        <div id="mapping-fields">
+            <div class="input-group">
+                <label for="map-subject">"項目/科目" 欄位 (主鍵)</label>
+                <select id="map-subject"></select>
+            </div>
+            <div class="input-group">
+                <label>"要加總的數值欄位"</label>
+                <div id="value-fields-list"></div>
+                <button type="button" id="add-value-field-btn" style="margin-top:10px;">+ 新增加總欄位</button>
             </div>
         </div>
-        <div class="control-group" id="fund-select-group"><label>選擇檔案：</label><select id="fund-select" disabled></select></div>
-        <div class="control-group" id="item-select-group" style="display:none;"><label>選擇項目：</label><select id="item-select" disabled></select></div>
-        <button id="download-html-btn" disabled>產生並下載HTML報告</button>
-        <button id="download-json-btn" disabled>匯出JSON檔</button>
+        <p id="mapping-placeholder" style="color:#777;">請先讀取標頭以顯示對應選單</p>
     </div>
-    <div class="controls" style="gap:22px;">
-        <label style="font-weight: bold; color: #007bff;">JSON 匯出對應設定 (處理後填寫)</label>
-        <div class="control-group"><label>"科目" 欄位：</label><select id="json-item-col" disabled></select></div>
-        <div class="control-group"><label>"前年度決算數" 欄位：</label><select id="json-prev-col" disabled></select></div>
-        <div class="control-group"><label>"上年度預算數" 欄位：</label><select id="json-last-col" disabled></select></div>
-        <div class="control-group"><label>"本年度預算數" 欄位：</label><select id="json-current-col" disabled></select></div>
+    <div class="config-section">
+        <button id="process-btn" disabled>開始彙總處理</button>
     </div>
-    <div id="status"></div>
-    <div id="preview-container"></div>
-    <div id="table-container"></div>
+    <div class="output-section" id="output-area">
+        <h2>5. 彙總報告結果</h2>
+        <div class="view-tabs">
+            <button class="tab-btn active" data-view="summary-view">加總總表</button>
+            <button class="tab-btn" data-view="individual-view">個別檔案</button>
+            <button class="tab-btn" data-view="item-view">項目查詢</button>
+        </div>
+        <div id="view-content">
+            <div id="summary-view" class="view-pane active"></div>
+            <div id="individual-view" class="view-pane"></div>
+            <div id="item-view" class="view-pane">
+                <select id="item-dropdown"></select>
+                <div id="item-detail-table"></div>
+            </div>
+        </div>
+    </div>
 </div>
 <script>
-document.addEventListener('DOMContentLoaded', ()=>{
-    // DOM & 變數
-    const dropZone=document.getElementById('drop-zone'), fileInput=document.getElementById('file-input');
-    const statusDiv=document.getElementById('status'), tableContainer=document.getElementById('table-container'), previewBtn=document.getElementById('preview-btn');
-    const previewContainer=document.getElementById('preview-container');
-    const headerRowInput=document.getElementById('header-row-input');
-    const startColSelect=document.getElementById('start-col-select'), startRowInput=document.getElementById('start-row-input');
-    const endColSelect=document.getElementById('end-col-select'), endRowInput=document.getElementById('end-row-input');
-    const processBtn=document.getElementById('process-btn');
-    const configInputs=[headerRowInput,startColSelect,startRowInput,endColSelect,endRowInput,processBtn];
-    const jsonItemCol=document.getElementById('json-item-col'),jsonPrevCol=document.getElementById('json-prev-col'),jsonLastCol=document.getElementById('json-last-col'),jsonCurrentCol=document.getElementById('json-current-col');
-    const jsonSelects=[jsonItemCol,jsonPrevCol,jsonLastCol,jsonCurrentCol];
-    const modeRadios = document.querySelectorAll('input[name="view-mode"]');
-    const fundSelect=document.getElementById('fund-select'),itemSelect=document.getElementById('item-select');
-    const fundSelectGroup=document.getElementById('fund-select-group'),itemSelectGroup=document.getElementById('item-select-group');
-    const downloadHtmlBtn=document.getElementById('download-html-btn'),downloadJsonBtn=document.getElementById('download-json-btn');
-    const progressContainer=document.getElementById('progress-container'),progressBar=document.getElementById('progress-bar'),progressText=document.getElementById('progress-text');
+const state = {
+    workbooks:[], allFileData:[], summaryData:new Map(), processedHeaders:[], 
+    mapping:{key:'',values:[]}, reportHeaders:[]
+};
+// DOM
+const dropArea = document.getElementById('drop-area');
+const fileInput = document.getElementById('file-input');
+const fileListDisplay = document.getElementById('file-list-display');
+const progressContainer=document.getElementById('progress-container');
+const progressBar=document.getElementById('progress-bar');
+const progressText=document.getElementById('progress-text');
+const previewArea=document.getElementById('preview-area');
+const dataRangeInput=document.getElementById('data-range'),headerRowInput=document.getElementById('header-row');
+const loadHeadersBtn=document.getElementById('load-headers-btn');
+const mappingFields=document.getElementById('mapping-fields'),mappingPlaceholder=document.getElementById('mapping-placeholder');
+const mapSelects={subject:document.getElementById('map-subject')};
+const addValueFieldBtn=document.getElementById('add-value-field-btn'), valueFieldsList=document.getElementById('value-fields-list');
+const processBtn=document.getElementById('process-btn');
+const outputArea=document.getElementById('output-area'),itemDropdown=document.getElementById('item-dropdown');
 
-    let allData=[],fundNames=[],itemNames=[],uploadedFiles=null, FIXED_HEADERS=[],ROWS_PER_FILE=0;
-
-    function populateColumnSelects(){
-        for(const sel of [startColSelect,endColSelect]){
-            sel.innerHTML='';
-            for(let i=0;i<26;i++) {
-                const col=String.fromCharCode(65+i);
-                const op=document.createElement('option');op.value=col;op.textContent=col; sel.appendChild(op);}
-        }
-        startColSelect.value='A'; endColSelect.value='I';
-    }
-    function saveSettings(){
-        localStorage.setItem('excelMergeSettings',JSON.stringify({
-            headerRow:headerRowInput.value,
-            startCol:startColSelect.value, startRow:startRowInput.value,
-            endCol:endColSelect.value, endRow:endRowInput.value
-        }));
-    }
-    function loadSettings(){
-        try{
-            const s=JSON.parse(localStorage.getItem('excelMergeSettings'));
-            if(!s)return;
-            headerRowInput.value=s.headerRow||5; startColSelect.value=s.startCol||'A';
-            startRowInput.value=s.startRow||6; endColSelect.value=s.endCol||'I';endRowInput.value=s.endRow||63;
-        }catch{}
-    }
-    // 初始
-    populateColumnSelects(); loadSettings();
-    dropZone.addEventListener('click',()=>fileInput.click());
-    fileInput.addEventListener('change',e=>handleFiles(e.target.files));
-    ['dragenter','dragover','dragleave','drop'].forEach(ev=>dropZone.addEventListener(ev,preventDefaults,false));
-    function preventDefaults(e){e.preventDefault();e.stopPropagation();}
-    ['dragenter','dragover'].forEach(ev=>dropZone.addEventListener(ev,()=>dropZone.classList.add('drag-over'),false));
-    ['dragleave','drop'].forEach(ev=>dropZone.addEventListener(ev,()=>dropZone.classList.remove('drag-over'),false));
-    dropZone.addEventListener('drop',e=>handleFiles(e.dataTransfer.files));
-    fundSelect.addEventListener('change',refreshTable); itemSelect.addEventListener('change',refreshTable);
-    modeRadios.forEach(radio=>radio.addEventListener('change',refreshTable));
-    downloadHtmlBtn.addEventListener('click',generateAndDownloadHtml); downloadJsonBtn.addEventListener('click',generateAndDownloadJson);
-    previewBtn.addEventListener('click',generatePreview); processBtn.addEventListener('click',startProcessing);
-
-    function handleFiles(files){
-        if(!files||!files.length)return;
-        if([...files].some(f=>f.size>10*1024*1024)){alert('有檔案超過10MB，請分批處理或減少欄列數！');return;}
-        uploadedFiles=files;
-        resetUI(false);
-        previewContainer.innerHTML='';
-        statusDiv.textContent=`已選擇 ${files.length} 個檔案。請點擊預覽。`;
-        previewBtn.disabled=false;
-    }
-
-    async function generatePreview(){
-        if(!uploadedFiles||!uploadedFiles.length){alert('請先上傳檔案');return;}
-        previewBtn.disabled=true; statusDiv.textContent="正在產生預覽..."; previewContainer.innerHTML='';
-        try{
-            const workbook=await readFileAsWorkbook(uploadedFiles[0]);
-            const firstSheetName=workbook.SheetNames[0],sheet=workbook.Sheets[firstSheetName];
-            const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null});
-            const maxRows=Math.min(rows.length,100),maxCols=Math.min(Math.max(26,...rows.map(r=>r?r.length:0)),50);
-            let html='<table><thead><tr><th></th>';
-            for(let j=0;j<maxCols;j++) html+=`<th>${XLSX.utils.encode_col(j)}</th>`;
-            html+='</tr></thead><tbody>';
-            let merges=(sheet['!merges']||[]).map(range=>({s:range.s,e:range.e}));
-            for(let i=0;i<maxRows;i++){
-                html+=`<tr><th>${i+1}</th>`;
-                const row=rows[i]||[];
-                for(let j=0;j<maxCols;j++){
-                    let cellValue=row[j]!=null?row[j]:'';
-                    // 預覽加強：合併儲存格視覺提示
-                    let mergedClass='';
-                    let isMerged=false;
-                    for(const m of merges){
-                        if(i>=m.s.r&&i<=m.e.r&&j>=m.s.c&&j<=m.e.c){isMerged=true;break;}
-                    }
-                    if(isMerged)mergedClass='potential-merged';
-                    html+=`<td class="${mergedClass}">${escapeHTML(cellValue)}</td>`;
-                }
-                html+='</tr>';
-            }
-            html+='</tbody></table>';
-            previewContainer.innerHTML=html;
-            statusDiv.textContent="預覽完成。請調整設定後點擊處理。";
-            configInputs.forEach(i=>i.disabled=false);
-        }catch(err){
-            statusDiv.textContent=`產生預覽失敗: ${err.message}`; previewBtn.disabled=false;
-        }
-    }
-
-    function escapeHTML(str){if(typeof str!=='string')return str; return str.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
-    async function startProcessing(){
-        if(!uploadedFiles||!uploadedFiles.length){alert('請先上傳檔案');return;}
-        // 讀取UI設定
-        const headerRow=+headerRowInput.value, startCol=startColSelect.value, startRow=+startRowInput.value, endCol=endColSelect.value, endRow=+endRowInput.value;
-        saveSettings();
-        // 驗證
-        if(isNaN(headerRow)||headerRow<=0){alert("請輸入有效標頭列數字！");return;}
-        if(isNaN(startRow)||isNaN(endRow)||startRow<=headerRow||endRow<startRow){alert("資料起始列必須大於標頭列，且小於等於結束列");return;}
-        const startColIdx=XLSX.utils.decode_col(startCol),endColIdx=XLSX.utils.decode_col(endCol);
-        if(endColIdx<startColIdx){alert("結束欄必須在起始欄之後！");return;}
-        // 初始化
-        resetUI(false); statusDiv.textContent='處理中... 讀取標頭列';
-        const dataRange=`${startCol}${startRow}:${endCol}${endRow}`, headerRange=`${startCol}${headerRow}:${endCol}${headerRow}`;
-        previewBtn.disabled=true; configInputs.forEach(i=>i.disabled=true);
-        progressBar.style.width="0%";progressText.textContent="0%";progressContainer.style.display='block';
-
-        try{
-            const firstFile=uploadedFiles[0];
-            const workbook=await readFileAsWorkbook(firstFile);
-            const firstSheetName=workbook.SheetNames[0],mainSheet=workbook.Sheets[firstSheetName];
-            const headerData=XLSX.utils.sheet_to_json(mainSheet,{header:1,range:headerRange,defval:null});
-            if(!headerData||!headerData.length||!headerData[0]) throw Error(`【無標頭資料】請檢查標頭列位置與資料範圍。`);
-            FIXED_HEADERS=headerData[0].map(h=>h?String(h).trim():`(空)`); ROWS_PER_FILE=endRow-startRow+1;
-            populateJsonSelects(FIXED_HEADERS); jsonSelects.forEach(s=>s.disabled=false);
-        }catch(e){
-            statusDiv.textContent=`讀取標頭出錯:${e.message}`; previewBtn.disabled=false;configInputs.forEach(i=>i.disabled=false);progressContainer.style.display='none';return;
-        }
-
-        // 處理多檔
-        statusDiv.textContent='標頭完成，處理所有檔案中...';
-        let processed=0;
-        const filePromises=Array.from(uploadedFiles).map((file,i)=>processFile(file,dataRange).then(()=>{ // 進度條
-            processed++;
-            const p=Math.round(100*processed/uploadedFiles.length);
-            progressBar.style.width=p+"%";progressText.textContent=p+"%";
-            statusDiv.textContent=`處理中...${processed}/${uploadedFiles.length}`;
-        }));
-        Promise.all(filePromises).then(()=>{
-            fundNames.sort();itemNames.sort();statusDiv.textContent=`處理完成，檔案數:${fundNames.length}`;
-            populateDropdowns(); if(allData.length){refreshTable(); downloadHtmlBtn.disabled=downloadJsonBtn.disabled=false;}
-            previewBtn.disabled=false; configInputs.forEach(i=>i.disabled=false);progressContainer.style.display='none';
-            // 資料檢查提醒
-            const issues=validateProcessedData();
-            if(issues.length) statusDiv.innerHTML+=`<br><span style="color:#f00;">${issues.join('<br>')}</span>`;
-        }).catch(e=>{
-            statusDiv.textContent=`處理檔案出錯:${e.message}`;previewBtn.disabled=false;configInputs.forEach(i=>i.disabled=false);progressContainer.style.display='none';
-        });
-    }
-
-    function readFileAsWorkbook(file){
-        return new Promise((resolve,reject)=>{
-            const reader=new FileReader();
-            reader.onload=e=>{
-                try{const workbook=XLSX.read(e.target.result,{type:'array'});resolve(workbook);}
-                catch(err){reject(Error(`解析 ${file.name} 失敗:${err.message}`));}
-            };
-            reader.onerror=()=>reject(Error(`讀取 ${file.name} 失敗`));
-            reader.readAsArrayBuffer(file);
-        });
-    }
-    function processFile(file,dataRange){
-        return new Promise((resolve,reject)=>{
-            const reader=new FileReader();
-            reader.onload=e=>{
-                try{
-                    const workbook=XLSX.read(e.target.result,{type:'array'});
-                    const firstSheet=workbook.SheetNames[0],mainSheet=workbook.Sheets[firstSheet];
-                    const fundName=file.name.replace(/\.(xlsx|xls)$/i,'').trim();
-                    if(!fundNames.includes(fundName))fundNames.push(fundName);
-                    const rows=XLSX.utils.sheet_to_json(mainSheet,{header:1,range:dataRange,defval:null});
-                    const records=rows.map(row=>{
-                        const rec={'檔案名稱':fundName};
-                        FIXED_HEADERS.forEach((head,idx)=>rec[head]=row[idx]);
-                        const itemName=rec[FIXED_HEADERS[0]];
-                        if(itemName&&!itemNames.includes(itemName))itemNames.push(itemName);
-                        return rec;
-                    });
-                    allData.push(...records);resolve();
-                }catch(e){reject(Error(`解析 ${file.name} 失敗:${e.message}`));}
-            };
-            reader.onerror=()=>reject(Error(`讀取 ${file.name} 失敗`));
-            reader.readAsArrayBuffer(file);
-        });
-    }
-    function populateJsonSelects(headers){
-        jsonSelects.forEach(sel=>{
-            sel.innerHTML='';const e=document.createElement('option');
-            e.value='';e.textContent='--- 請選擇 ---';sel.appendChild(e);
-            headers.forEach(h=>{const o=document.createElement('option');o.value=h;o.textContent=h;sel.appendChild(o);});
-        });
-        // 嘗試猜測預設
-        try{
-            if(headers[0])jsonItemCol.value=headers[0];
-            if(headers[1])jsonPrevCol.value=headers[1];
-            if(headers[2])jsonLastCol.value=headers[2];
-            if(headers[7])jsonCurrentCol.value=headers[7];
-        }catch{}
-    }
-    function resetUI(full=true){
-        allData=[];fundNames=[];itemNames=[];
-        [fundSelect,itemSelect,downloadHtmlBtn,downloadJsonBtn].forEach(e=>e.disabled=true);
-        tableContainer.innerHTML='';jsonSelects.forEach(s=>{s.innerHTML='';s.disabled=true;});
-        if(full){
-            uploadedFiles=null;fileInput.value='';previewContainer.innerHTML='';
-            previewBtn.disabled=true;configInputs.forEach(i=>i.disabled=true);
-            headerRowInput.value=5;startColSelect.value='A';startRowInput.value=6;endColSelect.value='I';endRowInput.value=63;
-        }
-    }
-
-    // ---- 資料驗證與進階UI ----
-    function validateProcessedData(){
-        const issues=[],rowCounts=fundNames.map(f=>allData.filter(r=>r['檔案名稱']==f).length);
-        if(new Set(rowCounts).size>1)issues.push(`（警告：不同檔案的資料列數不一致：${rowCounts.join(',')}）`);
-        FIXED_HEADERS.forEach((h,i)=>{
-            if(i===0)return;
-            if(!allData.some(r=>r[h]!=null&&r[h]!==''))issues.push(`（欄位${h}在所有檔案皆空）`);
-        });
-        return issues;
-    }
-
-    // ---- 下拉選單、表格UI ----
-    function populateDropdowns(){
-        const pop=(sel,opts)=>{
-            const cur=sel.value;
-            sel.innerHTML='';if(!opts.length){sel.innerHTML='<option>無可用選項</option>';sel.disabled=true;return;}
-            opts.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
-            sel.value=cur;if(sel.selectedIndex===-1)sel.selectedIndex=0;sel.disabled=false;
-        };pop(fundSelect,fundNames);pop(itemSelect,itemNames);
-    }
-    function refreshTable(){
-        const m=document.querySelector('input[name="view-mode"]:checked').value;
-        if(!allData.length)return;
-        fundSelectGroup.style.display=m==='individual'?'flex':'none';
-        itemSelectGroup.style.display=m==='compare'?'flex':'none';
-        tableContainer.innerHTML='';
-        switch(m){
-            case 'individual':displayIndividualFundTable(fundSelect.value);break;
-            case 'sum':displayAggregatedTable();break;
-            case 'compare':displayItemComparisonTable(itemSelect.value);break;
-        }
-    }
-    function displayIndividualFundTable(fund){
-        const records=allData.filter(r=>r['檔案名稱']===fund);
-        if(!records.length){tableContainer.innerHTML=`<p>無檔案「${fund}」資料</p>`;return;}
-        const t=createTable(FIXED_HEADERS),tbody=t.querySelector('tbody');
-        records.forEach(r=>{
-            const tr=document.createElement('tr');
-            FIXED_HEADERS.forEach(h=>{
-                const td=document.createElement('td');
-                td.textContent=formatNumber(r[h]);tr.appendChild(td);});
-            tbody.appendChild(tr);
-        });tableContainer.appendChild(t);
-    }
-    function displayAggregatedTable(){
-        if(!allData.length){tableContainer.innerHTML=`<p>沒可加總資料。</p>`;return;}
-        const summaryData=[];
-        for(let i=0;i<ROWS_PER_FILE;i++){
-            const row={};
-            FIXED_HEADERS.forEach((h,idx)=>{
-                if(idx===0){row[h]=allData[i]?.[h];return;}
-                let sum=0;
-                fundNames.forEach((_,fidx)=>{
-                    const recIdx=fidx*ROWS_PER_FILE+i,v=allData[recIdx]?.[h];
-                    if(typeof v==="number"&&!isNaN(v))sum+=v;
-                });row[h]=sum;
-            });summaryData.push(row);
-        }
-        const t=createTable(FIXED_HEADERS),tbody=t.querySelector('tbody');
-        summaryData.forEach(r=>{
-            const tr=document.createElement('tr');
-            FIXED_HEADERS.forEach(h=>{
-                const td=document.createElement('td');
-                td.textContent=formatNumber(r[h]);tr.appendChild(td);});
-            tbody.appendChild(tr);
-        });tableContainer.appendChild(t);
-    }
-    function displayItemComparisonTable(item){
-        if(!allData.length||!item){tableContainer.innerHTML=`<p>無法進行比較。</p>`;return;}
-        const h0=FIXED_HEADERS[0],headers=['檔案名稱',...FIXED_HEADERS.slice(1)];
-        const t=createTable(headers),tbody=t.querySelector("tbody");
-        fundNames.forEach(f=>{
-            const r=allData.find(r=>r['檔案名稱']===f&&r[h0]===item);
-            const tr=document.createElement('tr');
-            let td=document.createElement('td');td.textContent=f;tr.appendChild(td);
-            headers.slice(1).forEach(h=>{
-                td=document.createElement('td');td.textContent=formatNumber(r?r[h]:'-');tr.appendChild(td);
-            });
-            tbody.appendChild(tr);
-        });tableContainer.appendChild(t);
-    }
-    function createTable(headers){
-        const t=document.createElement('table'),thead=document.createElement('thead'),tbody=document.createElement('tbody'),tr=document.createElement('tr');
-        headers.forEach(h=>{const th=document.createElement('th');th.textContent=h;tr.appendChild(th);});thead.appendChild(tr);
-        t.appendChild(thead);t.appendChild(tbody);return t;
-    }
-    function formatNumber(val){return(typeof val==="number"&&!isNaN(val))?Math.round(val).toLocaleString("en-US"):val??'';}
-    function generateAndDownloadHtml(){
-        const m=document.querySelector('input[name="view-mode"]:checked').value;
-        let modeText='',subTitle='';
-        switch(m){
-            case 'individual':modeText='個別檔案摘要報告';subTitle=`檔案:${fundSelect.value}`;break;
-            case 'sum':modeText='所有檔案加總報告';break;
-            case 'compare':modeText='單項比較報告';subTitle=`比較項目:${itemSelect.value}`;break;}
-        const htmlNow=tableContainer.innerHTML;if(!htmlNow||htmlNow.startsWith('<p>')){alert('沒有可匯出的資料！');return;}
-        const styles=document.querySelector('style').innerHTML;
-        const hContent=`<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>${modeText}</title><style>${styles}</style></head>`+
-            `<body><div class="container"><h1>${modeText}</h1><h2>${subTitle}</h2>${htmlNow}</div></body></html>`;
-        const blob=new Blob([hContent],{type:'text/html;charset=utf-8'});
-        const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-        a.download=`${modeText.replace(/[\\/*?:"<>|]/g,'_')}.html`;
-        document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
-    }
-    function generateAndDownloadJson(){
-        if(!allData.length){alert('沒有可匯出的資料!');return;}
-        const itemHeader=jsonItemCol.value,prevYearHeader=jsonPrevCol.value,lastYearHeader=jsonLastCol.value,currentYearHeader=jsonCurrentCol.value;
-        if(!(itemHeader&&prevYearHeader&&lastYearHeader&&currentYearHeader)){alert('請將所有JSON欄位對應好！');return;}
-        const jsonData=allData.map(r=>({
-            "基金名稱":r['檔案名稱'],
-            "科目":r[itemHeader],
-            "本年度預算數":r[currentYearHeader],
-            "上年度預算數":r[lastYearHeader],
-            "前年度決算數":r[prevYearHeader]
-        }));
-        const blob=new Blob([JSON.stringify(jsonData,null,2)],{type:'application/json;charset=utf-8'});
-        const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`基金資料匯出_${new Date().toISOString().slice(0,10)}.json`;
-        document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
+//事件監聽初始化
+dropArea.addEventListener('click',()=>fileInput.click());
+dropArea.addEventListener('dragover',e=>{e.preventDefault();dropArea.style.backgroundColor='#e6f0ff';});
+dropArea.addEventListener('dragleave',()=>{dropArea.style.backgroundColor='#f8faff';});
+dropArea.addEventListener('drop',e=>{
+    e.preventDefault(); dropArea.style.backgroundColor='#f8faff';
+    if(e.dataTransfer.files.length>0){
+        fileInput.files = e.dataTransfer.files;
+        handleFiles(fileInput.files);
     }
 });
+fileInput.addEventListener('change',e=>{
+    if(e.target.files.length>0){handleFiles(e.target.files);}
+});
+loadHeadersBtn.addEventListener('click',loadHeaders);
+processBtn.addEventListener('click',processData);
+itemDropdown.addEventListener('change',renderItemDetailView);
+addValueFieldBtn.addEventListener('click',addNewValueFieldRow);
+valueFieldsList.addEventListener('click',e=>{
+    if(e.target.classList.contains('remove-field-btn')){e.target.parentElement.remove();}
+});
+setupTabs();
+
+//設定記憶
+function saveSetting(){localStorage.setItem('excelMergeSettings',JSON.stringify({range:dataRangeInput.value,headerRow:headerRowInput.value}));}
+function loadSetting(){try{const c=JSON.parse(localStorage.getItem('excelMergeSettings'));if(c){dataRangeInput.value=c.range;headerRowInput.value=c.headerRow;}}catch{}}
+loadSetting();
+
+//檔案讀取&進度
+function readFile(file){
+    return new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=e=>{
+            try{const w=XLSX.read(e.target.result,{type:'array'});resolve({file,workbook:w});}catch(err){reject(err);}
+        };
+        reader.onerror=err=>reject(err);
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+async function handleFiles(fileList){
+    if([...fileList].some(f=>f.size>10*1024*1024)){alert('檔案過大，請分批上傳！');return;}
+    dropArea.innerHTML='正在讀取與解析檔案...'; previewArea.innerHTML='<p style="padding:20px;text-align:center;">正在讀取與解析檔案...</p>';
+    fileListDisplay.innerHTML=''; state.workbooks=[];
+    progressBar.style.width="0%";progressText.textContent="0%";progressContainer.style.display="block";
+    const filePromises=Array.from(fileList).map(readFile);
+    try {
+        const results=await Promise.all(filePromises.map((p,i)=>p.then(res=>{
+            let pct=Math.round(((i+1)/fileList.length)*100);
+            progressBar.style.width=pct+"%";progressText.textContent=pct+"%";
+            return res;
+        })));
+        state.workbooks=results;
+        fileListDisplay.innerHTML='已載入檔案：'+state.workbooks.map(wb=>`<li>- ${wb.file.name}</li>`).join('');
+        dropArea.innerHTML='點擊或拖曳更換檔案';dropArea.classList.add('minimized');
+        progressContainer.style.display="none";
+        generatePreview(state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]]);
+        loadHeadersBtn.disabled=false;
+    }catch(err){
+        previewArea.innerHTML=`<p style="padding:20px;text-align:center;color:red;">檔案解析失敗：${err.message}</p>`;
+        dropArea.classList.remove('minimized');dropArea.innerHTML='拖曳 <b>多個</b> Excel 檔案至此，或點擊此處選擇檔案';
+        progressContainer.style.display="none";
+    }
+}
+
+//預覽 + 合併格提示優化
+function generatePreview(sheet){
+    if(!sheet||!sheet['!ref']){
+        previewArea.innerHTML='<p class="text-center text-muted">工作表為空</p>';return;
+    }
+    const fullRange=XLSX.utils.decode_range(sheet['!ref']);
+    const minCol=fullRange.s.c,maxCol=fullRange.e.c,minRow=fullRange.s.r,maxRow=fullRange.e.r;
+    const merges=sheet['!merges']||[];
+    let html='<table><thead><tr><th></th>';
+    for(let C=minCol;C<=maxCol;++C)html+='<th>'+XLSX.utils.encode_col(C)+'</th>';
+    html+='</tr></thead><tbody>';
+    const totalRows=maxRow-minRow+1,colCount=maxCol-minCol+1;
+    // 預覽前後5列，中間省略
+    const renderRows=(s,e)=>{
+        let range={s:{r:s,c:minCol},e:{r:e,c:maxCol}};
+        const rows=XLSX.utils.sheet_to_json(sheet,{header:1,range:XLSX.utils.encode_range(range),defval:''});
+        rows.forEach((row,rowIdx)=>{
+            const excelRowNum=s+rowIdx+1;
+            html+='<tr><th>'+excelRowNum+'</th>';
+            for(let c=0;c<colCount;c++){
+                let cellAddress=XLSX.utils.encode_cell({r:s+rowIdx,c:minCol+c});
+                let isMerged=merges.find(m=>(s+rowIdx)>=m.s.r&&(s+rowIdx)<=m.e.r&&(minCol+c)>=m.s.c&&(minCol+c)<=m.e.c);
+                html+=`<td${isMerged?' class="merge-hint"':''}>${row[c]!=null?row[c]:''}</td>`;
+            }
+            html+='</tr>';
+        });
+    };
+    if(totalRows<=11){renderRows(minRow,maxRow);}
+    else{renderRows(minRow,minRow+4);html+=`<tr><th>...</th><td colspan="${colCount}" class="omitted-row-cell">... (省略${totalRows-10}列) ...</td></tr>`;renderRows(maxRow-4,maxRow);}
+    html+='</tbody></table>'; previewArea.innerHTML=html;
+}
+
+//標頭讀取、映射、動態欄位
+function loadHeaders(){
+    if(state.workbooks.length==0){alert('請先上傳檔案');return;}
+    const sheet=state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
+    const dataRangeStr=dataRangeInput.value.trim(),headerRow=parseInt(headerRowInput.value,10);
+    if(!dataRangeStr||!headerRow){alert('請輸入有效範圍與標頭列');return;}
+    try{
+        saveSetting();
+        const range=XLSX.utils.decode_range(dataRangeStr),headerRowIndex=headerRow-1;
+        state.processedHeaders=[];
+        for(let C=range.s.c;C<=range.e.c;++C){
+            const cellAddr=XLSX.utils.encode_cell({r:headerRowIndex,c:C}),
+            cell=sheet[cellAddr];
+            let headerName=cell&&cell.v?String(cell.v).trim():`(欄${C+1})`;
+            state.processedHeaders.push(headerName);
+        }
+        populateMappingSelects(state.processedHeaders);
+        mappingFields.style.display='block';mappingPlaceholder.style.display='none';processBtn.disabled=false;
+    }catch(err){alert(`讀取標頭失敗：${err.message}`);}
+}
+
+function populateMappingSelects(headers){
+    let ops='<option value="--- 請選擇 ---">--- 請選擇 ---</option>';
+    headers.forEach(h=>ops+=`<option value="${h}">${h}</option>`);
+    mapSelects.subject.innerHTML=ops;
+    autoSelectMapping(headers);
+}
+function autoSelectMapping(headers){
+    const found=headers.find(h=>["科目","項目"].some(k=>h.indexOf(k)!==-1));
+    if(found)mapSelects.subject.value=found;
+}
+function addNewValueFieldRow(){
+    const row=document.createElement('div');row.className='value-field-row';
+    const select=document.createElement('select');select.className='value-field-select';
+    const input=document.createElement('input');input.type='text';input.className='value-field-name';input.placeholder='輸入報表欄位名稱(可選)';
+    let ops='<option value="">--選擇Excel欄位--</option>';
+    state.processedHeaders.forEach(h=>ops+=`<option value="${h}">${h}</option>`);select.innerHTML=ops;
+    select.addEventListener('change',()=>{if(!input.value&&select.value)input.value=select.value;});
+    const removeBtn=document.createElement('button');removeBtn.type='button';removeBtn.className='remove-field-btn';removeBtn.textContent='移除';
+    row.appendChild(select);row.appendChild(input);row.appendChild(removeBtn);valueFieldsList.appendChild(row);
+}
+
+//核心處理流程
+function processData(){
+    state.mapping.key=mapSelects.subject.value;if(state.mapping.key==='--- 請選擇 ---'){alert("請選擇主鍵欄位");return;}
+    state.mapping.values=[]; state.reportHeaders=[];
+    const valueRows=valueFieldsList.querySelectorAll('.value-field-row');
+    if(valueRows.length==0){alert('請新增加總欄');return;}
+    valueRows.forEach(row=>{
+        const excelHeader=row.querySelector('.value-field-select').value,reportHeader=row.querySelector('.value-field-name').value.trim();
+        if(!excelHeader){alert('加總欄必選Excel欄');return;}
+        state.mapping.values.push({excelHeader,reportHeader:reportHeader||excelHeader});
+    });
+    state.reportHeaders=state.mapping.values.map(m=>m.reportHeader);
+    const dataRangeStr=dataRangeInput.value.trim();
+    //== 處理檔案 ==
+    state.allFileData=[];
+    state.summaryData=new Map();
+    try{
+        state.workbooks.forEach(wb=>{
+            const sheet=wb.workbook.Sheets[wb.workbook.SheetNames[0]];
+            const dataJson=XLSX.utils.sheet_to_json(sheet,{range:dataRangeStr,header:state.processedHeaders});
+            const transformed=dataJson.map(row=>{
+                const newRow={}; newRow[state.mapping.key]=row[state.mapping.key];
+                state.mapping.values.forEach(map=>{newRow[map.reportHeader]=row[map.excelHeader];});
+                return newRow;
+            }).filter(row=>row[state.mapping.key]);
+            state.allFileData.push({fileName:wb.file.name,data:transformed});
+        });
+        //== 彙總 ==
+        state.allFileData.forEach(file=>{
+            file.data.forEach(row=>{
+                const key=row[state.mapping.key];
+                if(!state.summaryData.has(key)){
+                    let obj={}; obj[state.mapping.key]=key;
+                    state.mapping.values.forEach(map=>obj[map.reportHeader]=toNumber(row[map.reportHeader]));
+                    state.summaryData.set(key,obj);
+                }else{
+                    let obj=state.summaryData.get(key);
+                    state.mapping.values.forEach(map=>obj[map.reportHeader]+=toNumber(row[map.reportHeader]));
+                }
+            });
+        });
+        renderSummaryView(); renderIndividualViews(); renderItemView();
+        outputArea.style.display='block';
+        alert(`處理完成！共處理 ${state.workbooks.length} 檔案，彙總了 ${state.summaryData.size} 項目。`);
+    }catch(err){alert(`處理資料錯誤：${err.message}`);}
+}
+function toNumber(v){return(typeof v==='number')?v:parseFloat(v)||0;}
+
+//報表渲染
+function generateHtmlTable(data,headers,formatNumbers=false){
+    let html='<table class="report-table"><thead><tr>';
+    headers.forEach(h=>html+=`<th>${h}</th>`);html+='</tr></thead><tbody>';
+    data.forEach(row=>{
+        html+='<tr>'; headers.forEach(h=>{
+            const val=row[h]; html+=formatNumbers&&typeof val==='number'?`<td class="number">${val.toFixed(2)}</td>`:`<td>${val!=null?val:''}</td>`;
+        }); html+='</tr>';
+    });
+    html+='</tbody></table>'; return html;
+}
+function renderSummaryView(){
+    const view=document.getElementById('summary-view');
+    const data=Array.from(state.summaryData.values()),headers=[state.mapping.key,...state.reportHeaders];
+    view.innerHTML=generateHtmlTable(data,headers,true);
+}
+function renderIndividualViews(){
+    const view=document.getElementById('individual-view');let html='';
+    const headers=[state.mapping.key,...state.reportHeaders];
+    state.allFileData.forEach(file=>{
+        html+=`<div class="individual-report"><h3>${file.fileName}</h3>${generateHtmlTable(file.data,headers,false)}</div>`;
+    });
+    view.innerHTML=html;
+}
+function renderItemView(){
+    itemDropdown.innerHTML='<option value="">--- 請選擇要查詢的項目 ---</option>';
+    Array.from(state.summaryData.keys()).sort().forEach(item=>{
+        itemDropdown.innerHTML+=`<option value="${item}">${item}</option>`;
+    });
+    document.getElementById('item-detail-table').innerHTML='';
+}
+function renderItemDetailView(){
+    const sel=itemDropdown.value,container=document.getElementById('item-detail-table');
+    if(!sel){container.innerHTML='';return;}
+    const headers=['檔案名稱',...state.reportHeaders];
+    let data=[];
+    state.allFileData.forEach(file=>{
+        const row=file.data.find(r=>r[state.mapping.key]===sel);
+        if(row){
+            let d={"檔案名稱":file.fileName};
+            state.reportHeaders.forEach(h=>d[h]=toNumber(row[h]));
+            data.push(d);
+        }
+    });
+    const srow=state.summaryData.get(sel);
+    if(srow){
+        let total={"檔案名稱":"<strong>總計</strong>"};state.reportHeaders.forEach(h=>total[h]=srow[h]);data.push(total);
+    }
+    container.innerHTML=generateHtmlTable(data,headers,true);
+}
+//頁籤/Tab UI
+function setupTabs(){
+    document.querySelector('.view-tabs').addEventListener('click',e=>{
+        if(e.target.classList.contains('tab-btn')){
+            const trg=e.target.dataset.view;
+            document.querySelectorAll('.tab-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.view==trg));
+            document.querySelectorAll('.view-pane').forEach(p=>p.classList.toggle('active',p.id==trg));
+        }
+    });
+}
 </script>
 </body>
 </html>
