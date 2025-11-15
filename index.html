@@ -69,7 +69,7 @@
         .text-muted{color:#888;}
         
         #progress-container{height:22px;background:#e5e9f2;border-radius:8px;overflow:hidden;margin-bottom:8px;display:none;}
-*       #progress-bar{height:100%;background:#007bff;width:0%;transition:.25s;}
+        #progress-bar{height:100%;background:#007bff;width:0%;transition:.25s;}
         #progress-text{margin-left:8px;}
         
         .auto-detect-info{background:#d1ecf1;border-left:4px solid #17a2b8;padding:10px;margin:10px 0;border-radius:4px;font-size:0.9em;}
@@ -136,7 +136,7 @@
             <div id="item-view" class="view-pane">
                 <select id="item-dropdown"></select>
                 <div id="item-detail-table"></div>
-section         </div>
+            </div>
         </div>
     </div>
 </div>
@@ -423,7 +423,7 @@ function loadHeadersAndDetectRange() {
             dataRangeInput.value = rangeStr;
             state.detectedRange = detected;
             autoDetectResult.innerHTML = `<div class="auto-detect-info"><strong>✓ 自動偵測成功</strong><br>偵測到資料範圍：${rangeStr}</div>`;
-i       } else {
+        } else {
             alert('無法自動偵測範圍，請手動輸入');
             return;
         }
@@ -520,13 +520,13 @@ function renderMappingTable() {
                 <td class="col-role">
                     <select data-idx="${idx}" class="role-select">
                         <option value="ignore" ${col.role === 'ignore' ? 'selected' : ''}>忽略</option>
-                        <option value="key" ${col.role === 'key' ? 'selected' : ''}>主鍵欄位</option>
+M                   <option value="key" ${col.role === 'key' ? 'selected' : ''}>主鍵欄位</option>
                         <option value="value" ${col.role === 'value' ? 'selected' : ''}>加總欄位</option>
                     </select>
                 </td>
                 <td class="col-include">
                     <input type="checkbox" 
-                           data-idx="${idx}" 
+                           data-idx="${idx}"s
                            class="include-checkbox"
                            ${col.include ? 'checked' : ''}>
                 </td>
@@ -556,7 +556,7 @@ function renderMappingTable() {
             state.columnMappings[idx].role = e.target.value;
             // 自動勾選/取消勾選
             const checkbox = document.querySelector(`.include-checkbox[data-idx="${idx}"]`);
-            if(e.target.value !== 'ignore') {
+M           if(e.target.value !== 'ignore') {
                 checkbox.checked = true;
                 state.columnMappings[idx].include = true;
             } else {
@@ -567,7 +567,7 @@ function renderMappingTable() {
     });
     
     document.querySelectorAll('.include-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', e => {
+s       checkbox.addEventListener('change', e => {
             const idx = parseInt(e.target.dataset.idx);
             state.columnMappings[idx].include = e.target.checked;
         });
@@ -587,7 +587,7 @@ function processData() {
     
     if(keyColumns.length > 1) {
         alert('只能選擇一個主鍵欄位！');
-        return;
+M       return;
     }
     
     if(valueColumns.length === 0) {
@@ -618,7 +618,7 @@ function processData() {
             
             // 讀取所有資料（不含標頭）
             const dataRows = XLSX.utils.sheet_to_json(sheet, {
-                header: 1,
+      M         header: 1,
                 range: XLSX.utils.encode_range({
                     s: {r: headerRowIdx + 1, c: range.s.c},
                     e: {r: range.e.r, c: range.e.c}
@@ -633,7 +633,7 @@ function processData() {
                     return; // 跳過空列
                 }
                 
-                const keyColIdx = keyCol.excelCol.charCodeAt(0) - 'A'.charCodeAt(0);
+    M           const keyColIdx = keyCol.excelCol.charCodeAt(0) - 'A'.charCodeAt(0);
                 const keyValue = row[keyColIdx];
                 
                 if(!keyValue || String(keyValue).trim() === '') {
@@ -641,7 +641,7 @@ function processData() {
                 }
                 
                 const dataRow = {};
-                dataRow[keyName] = String(keyValue).trim();
+              M dataRow[keyName] = String(keyValue).trim();
                 
                 valueColumns.forEach(valCol => {
                     const colIdx = valCol.excelCol.charCodeAt(0) - 'A'.charCodeAt(0);
@@ -651,7 +651,7 @@ function processData() {
                 });
                 
                 transformed.push(dataRow);
-            });
+M           });
             
             state.allFileData.push({
                 fileName: wb.file.name,
@@ -671,16 +671,16 @@ function processData() {
                     valueColumns.forEach(valCol => {
                         const colName = valCol.customName || valCol.autoHeader;
                         summaryRow[colName] = row[colName] || 0;
-                    });
+      M             });
                     
                     state.summaryData.set(key, summaryRow);
-section             } else {
+                } else {
                     const summaryRow = state.summaryData.get(key);
                     
                     valueColumns.forEach(valCol => {
                         const colName = valCol.customName || valCol.autoHeader;
                         summaryRow[colName] += (row[colName] || 0);
-                    });
+            M       });
                 }
             });
         });
@@ -692,7 +692,7 @@ section             } else {
         
         outputArea.style.display = 'block';
         alert(`處理完成！\n共處理 ${state.workbooks.length} 個檔案\n彙總了 ${state.summaryData.size} 個項目`);
-config       
+        
     } catch(err) {
         alert(`處理資料錯誤：${err.message}`);
         console.error(err);
@@ -701,14 +701,14 @@ config       
 
 function toNumber(val) {
     if(val == null || val === '') return 0;
-    if(typeof val === 'number') return val;
+s   if(typeof val === 'number') return val;
     const num = parseFloat(val);
     return isNaN(num) ? 0 : num;
 }
 
 // 生成 HTML 表格
 function generateHtmlTable(data, headers, formatNumbers = false) {
-Read     let html = '<table class="report-table"><thead><tr>';
+    let html = '<table class="report-table"><thead><tr>';
     headers.forEach(h => html += `<th>${h}</th>`);
     html += '</tr></thead><tbody>';
     
@@ -718,9 +718,9 @@ Read     let html = '<table class="report-table"><thead><tr>';
             const val = row[h];
             if(formatNumbers && typeof val === 'number') {
                 html += `<td class="number">${val.toFixed(2)}</td>`;
-Note           } else {
+            } else {
                 html += `<td>${val != null ? val : ''}</td>`;
-            }
+s           }
         });
         html += '</tr>';
     });
@@ -731,10 +731,10 @@ Note           } else {
 
 // 渲染總表
 function renderSummaryView(keyName, valueColumns) {
-section     const view = document.getElementById('summary-view');
+    const view = document.getElementById('summary-view');
     const data = Array.from(state.summaryData.values());
     const headers = [keyName, ...valueColumns.map(c => c.customName || c.autoHeader)];
-    view.innerHTML = '<h3>所有檔案加總結果</h3>' + generateHtmlTable(data, headers, true);
+S   view.innerHTML = '<h3>所有檔案加總結果</h3>' + generateHtmlTable(data, headers, true);
 }
 
 // 渲染個別檔案
@@ -745,7 +745,7 @@ function renderIndividualViews(keyName, valueColumns) {
     let html = '';
     state.allFileData.forEach(file => {
         html += `<div class="individual-report">
-            <h3>${file.fileName}</h3>
+s           <h3>${file.fileName}</h3>
             ${generateHtmlTable(file.data, headers, false)}
         </div>`;
     });
@@ -755,7 +755,7 @@ function renderIndividualViews(keyName, valueColumns) {
 
 // 渲染項目查詢
 function renderItemView(keyName, valueColumns) {
-Read     itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的項目 ---</option>';
+    itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的項目 ---</option>';
     
     Array.from(state.summaryData.keys()).sort().forEach(item => {
         itemDropdown.innerHTML += `<option value="${item}">${item}</option>`;
@@ -770,7 +770,7 @@ Read     itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的�
 
 // 渲染項目詳細資料
 function renderItemDetailView() {
-Rules     const selectedItem = itemDropdown.value;
+s   const selectedItem = itemDropdown.value;
     const container = document.getElementById('item-detail-table');
     
     if(!selectedItem) {
@@ -786,7 +786,7 @@ Rules     const selectedItem = itemDropdown.value;
     
     // 收集每個檔案的資料
     state.allFileData.forEach(file => {
-  Note       const row = file.data.find(r => r[keyName] === selectedItem);
+        const row = file.data.find(r => r[keyName] === selectedItem);
         if(row) {
             const dataRow = {'檔案名稱': file.fileName};
             valueColNames.forEach(colName => {
@@ -802,11 +802,11 @@ Rules     const selectedItem = itemDropdown.value;
         const totalRow = {'檔案名稱': '<strong>總計</strong>'};
         valueColNames.forEach(colName => {
             totalRow[colName] = summaryRow[colName] || 0;
-rules         });
+        });
         data.push(totalRow);
     }
     
-    container.innerHTML = '<h3>項目：' + selectedItem + '</h3>' + 
+    container.innerHTML = '<h3>項目：' + selectedItem + '</h3>' +s
                          generateHtmlTable(data, headers, true);
 }
 
@@ -815,13 +815,13 @@ function setupTabs() {
     document.querySelector('.view-tabs').addEventListener('click', e => {
         if(e.target.classList.contains('tab-btn')) {
             const targetView = e.target.dataset.view;
-            
+s           
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.view === targetView);
             });
             
-    Setting       document.querySelectorAll('.view-pane').forEach(pane => {
-                pane.classList.toggle('active', pane.id === targetView);
+            document.querySelectorAll('.view-pane').forEach(pane => {
+s               pane.classList.toggle('active', pane.id === targetView);
             });
         }
     });
