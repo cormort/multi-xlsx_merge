@@ -1,153 +1,153 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v10.0-opt)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-        body {
-            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
-            line-height: 1.6; background: #f4f7f6; color: #333; padding:20px; max-width:1400px; margin:0 auto;
-        }
-        h1,h2,h3{color:#0056b3;}
-        h2{border-bottom:2px solid #e0e0e0; padding-bottom:5px;}
-        #app-container{background:#fff;border-radius:8px;box-shadow:0 4px 12px #0001;padding:25px;}
-        .config-section,.preview-section,.mapping-section,.output-section{margin-bottom:30px;}
-        #drop-area{border:2px dashed #007bff;border-radius:8px;padding:40px;text-align:center;background:#f8faff;color:#0056b3;font-size:1.1em;cursor:pointer;transition:.3s;}
-        #drop-area:hover{background:#e6f0ff;} #drop-area.minimized{padding:15px;font-size:.95em;}
-        #file-input{display:none;} #file-list-display{list-style:none;padding:0;margin-top:10px;}
-        #file-list-display li{font-size:.9em;color:#555;}
-        #preview-area{max-height:400px;overflow:auto;border:1px solid #ddd;border-radius:5px;background:#fafafa;margin-top:15px;}
-        #preview-area table,.report-table{width:100%;border-collapse:collapse;font-size:.9em;}
-        #preview-area th,#preview-area td,.report-table th,.report-table td{border:1px solid #ccc;padding:6px 8px;min-width:80px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-        #preview-area thead th,.report-table thead th{position:-webkit-sticky;position:sticky;top:0;background:#e9ecef;z-index:10;}
-        #preview-area tbody th,.report-table tbody th{position:-webkit-sticky;position:sticky;left:0;background:#f1f3f5;z-index:5;}
-        #preview-area thead th:first-child,.report-table thead th:first-child{left:0;z-index:20;background:#e0e0e0;}
-        .omitted-row-cell{text-align:center;color:#777;font-style:italic;background:#f9f9f9;}
-        .report-table td.number{text-align:right;font-family:monospace;}
-        .input-group{margin-top:15px;}
-        .input-group label{display:block;font-weight:bold;margin-bottom:5px;color:#555;}
-        .input-group input[type="text"],.input-group input[type="number"],.input-group select{width:100%;max-width:300px;padding:8px 10px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;}
-        button{background:#007bff;color:#fff;border:none;padding:10px 18px;border-radius:5px;cursor:pointer;font-size:1em;font-weight:500;transition:.2s;margin-right:10px;}
-        button:hover{background:#0056b3;}
-        button:disabled{background:#c0c0c0;cursor:not-allowed;}
-        #load-headers-btn{background:#28a745;} #load-headers-btn:hover{background:#218838;}
-        #mapping-fields{display:none;padding-top:15px;}
-        
-        /* 欄位映射表格樣式 */
-        .mapping-table-container{margin-top:20px;overflow-x:auto;}
-        .mapping-table{width:100%;border-collapse:collapse;background:#fff;}
-        .mapping-table th{background:#007bff;color:#fff;padding:12px;text-align:left;font-weight:600;}
-        .mapping-table td{padding:10px;border-bottom:1px solid #e0e0e0;}
-        .mapping-table tr:hover{background:#f8f9fa;}
-        .mapping-table input[type="text"]{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;}
-        .mapping-table select{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;background:#fff;}
-        .mapping-table .col-excel{width:120px;font-family:monospace;color:#0056b3;font-weight:600;}
-        .mapping-table .col-auto-header{max-width:200px;color:#666;font-size:0.9em;}
-        .mapping-table .col-custom-name{min-width:200px;}
-        .mapping-table .col-role{width:150px;}
-        .mapping-table .col-include{width:80px;text-align:center;}
-        .mapping-table input[type="checkbox"]{width:20px;height:20px;cursor:pointer;}
-        
-        .role-key{background:#ffc107;color:#000;padding:3px 8px;border-radius:3px;font-size:0.85em;font-weight:600;}
-        .role-value{background:#28a745;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.85em;font-weight:600;}
-        .role-ignore{background:#6c757d;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.85em;font-weight:600;}
-        
-        .hint-text{color:#666;font-size:0.9em;margin-top:10px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;}
-        
-        .output-section{display:none;}
-        .view-tabs{border-bottom:2px solid #dee2e6;margin-bottom:15px;}
-        .tab-btn{background:transparent;color:#0056b3;border:none;padding:10px 15px;cursor:pointer;font-size:1.1em;margin-right:5px;border-radius:5px 5px 0 0;transition:.2s;}
-        .tab-btn:hover{background:#e6f0ff;}
-        .tab-btn.active{background:#0056b3;color:#fff;} .view-pane{display:none;padding:10px;}
-        .view-pane.active{display:block;} #item-view select{font-size:1.1em;padding:8px;margin-bottom:15px;}
-        #individual-view .individual-report{margin-bottom:30px;border-bottom:2px solid #0056b3;padding-bottom:15px;}
-        
-        .merge-hint{background:#fff3cd;border:2px dashed #ffc107;}
-        .text-center{text-align:center;}
-        .text-muted{color:#888;}
-        
-        #progress-container{height:22px;background:#e5e9f2;border-radius:8px;overflow:hidden;margin-bottom:8px;display:none;}
-        #progress-bar{height:100%;background:#007bff;width:0%;transition:.25s;}
-        #progress-text{margin-left:8px;}
-        
-        .auto-detect-info{background:#d1ecf1;border-left:4px solid #17a2b8;padding:10px;margin:10px 0;border-radius:4px;font-size:0.9em;}
-        .auto-detect-info strong{color:#0c5460;}
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基金資料彙總報告產生器 (v10.0-opt)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+            line-height: 1.6; background: #f4f7f6; color: #333; padding:20px; max-width:1400px; margin:0 auto;
+        }
+        h1,h2,h3{color:#0056b3;}
+        h2{border-bottom:2px solid #e0e0e0; padding-bottom:5px;}
+        #app-container{background:#fff;border-radius:8px;box-shadow:0 4px 12px #0001;padding:25px;}
+        .config-section,.preview-section,.mapping-section,.output-section{margin-bottom:30px;}
+        #drop-area{border:2px dashed #007bff;border-radius:8px;padding:40px;text-align:center;background:#f8faff;color:#0056b3;font-size:1.1em;cursor:pointer;transition:.3s;}
+        #drop-area:hover{background:#e6f0ff;} #drop-area.minimized{padding:15px;font-size:.95em;}
+        #file-input{display:none;} #file-list-display{list-style:none;padding:0;margin-top:10px;}
+        #file-list-display li{font-size:.9em;color:#555;}
+        #preview-area{max-height:400px;overflow:auto;border:1px solid #ddd;border-radius:5px;background:#fafafa;margin-top:15px;}
+        #preview-area table,.report-table{width:100%;border-collapse:collapse;font-size:.9em;}
+        #preview-area th,#preview-area td,.report-table th,.report-table td{border:1px solid #ccc;padding:6px 8px;min-width:80px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        #preview-area thead th,.report-table thead th{position:-webkit-sticky;position:sticky;top:0;background:#e9ecef;z-index:10;}
+        #preview-area tbody th,.report-table tbody th{position:-webkit-sticky;position:sticky;left:0;background:#f1f3f5;z-index:5;}
+        #preview-area thead th:first-child,.report-table thead th:first-child{left:0;z-index:20;background:#e0e0e0;}
+        .omitted-row-cell{text-align:center;color:#777;font-style:italic;background:#f9f9f9;}
+        .report-table td.number{text-align:right;font-family:monospace;}
+        .input-group{margin-top:15px;}
+        .input-group label{display:block;font-weight:bold;margin-bottom:5px;color:#555;}
+        .input-group input[type="text"],.input-group input[type="number"],.input-group select{width:100%;max-width:300px;padding:8px 10px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;}
+        button{background:#007bff;color:#fff;border:none;padding:10px 18px;border-radius:5px;cursor:pointer;font-size:1em;font-weight:500;transition:.2s;margin-right:10px;}
+        button:hover{background:#0056b3;}
+        button:disabled{background:#c0c0c0;cursor:not-allowed;}
+        #load-headers-btn{background:#28a745;} #load-headers-btn:hover{background:#218838;}
+        #mapping-fields{display:none;padding-top:15px;}
+        
+        /* 欄位映射表格樣式 */
+        .mapping-table-container{margin-top:20px;overflow-x:auto;}
+        .mapping-table{width:100%;border-collapse:collapse;background:#fff;}
+        .mapping-table th{background:#007bff;color:#fff;padding:12px;text-align:left;font-weight:600;}
+        .mapping-table td{padding:10px;border-bottom:1px solid #e0e0e0;}
+        .mapping-table tr:hover{background:#f8f9fa;}
+        .mapping-table input[type="text"]{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;}
+        .mapping-table select{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;background:#fff;}
+        .mapping-table .col-excel{width:120px;font-family:monospace;color:#0056b3;font-weight:600;}
+        .mapping-table .col-auto-header{max-width:200px;color:#666;font-size:0.9em;}
+        .mapping-table .col-custom-name{min-width:200px;}
+        .mapping-table .col-role{width:150px;}
+        .mapping-table .col-include{width:80px;text-align:center;}
+        .mapping-table input[type="checkbox"]{width:20px;height:20px;cursor:pointer;}
+        
+        .role-key{background:#ffc107;color:#000;padding:3px 8px;border-radius:3px;font-size:0.85em;font-weight:600;}
+        .role-value{background:#28a745;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.85em;font-weight:600;}
+        .role-ignore{background:#6c757d;color:#fff;padding:3px 8px;border-radius:3px;font-size:0.85em;font-weight:600;}
+        
+        .hint-text{color:#666;font-size:0.9em;margin-top:10px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;}
+        
+        .output-section{display:none;}
+        .view-tabs{border-bottom:2px solid #dee2e6;margin-bottom:15px;}
+        .tab-btn{background:transparent;color:#0056b3;border:none;padding:10px 15px;cursor:pointer;font-size:1.1em;margin-right:5px;border-radius:5px 5px 0 0;transition:.2s;}
+        .tab-btn:hover{background:#e6f0ff;}
+        .tab-btn.active{background:#0056b3;color:#fff;} .view-pane{display:none;padding:10px;}
+        .view-pane.active{display:block;} #item-view select{font-size:1.1em;padding:8px;margin-bottom:15px;}
+        #individual-view .individual-report{margin-bottom:30px;border-bottom:2px solid #0056b3;padding-bottom:15px;}
+        
+        .merge-hint{background:#fff3cd;border:2px dashed #ffc107;}
+        .text-center{text-align:center;}
+        .text-muted{color:#888;}
+        
+        #progress-container{height:22px;background:#e5e9f2;border-radius:8px;overflow:hidden;margin-bottom:8px;display:none;}
+*       #progress-bar{height:100%;background:#007bff;width:0%;transition:.25s;}
+        #progress-text{margin-left:8px;}
+        
+        .auto-detect-info{background:#d1ecf1;border-left:4px solid #17a2b8;padding:10px;margin:10px 0;border-radius:4px;font-size:0.9em;}
+        .auto-detect-info strong{color:#0c5460;}
+    </style>
 </head>
 <body>
 <div id="app-container">
-    <h1>基金資料彙總報告產生器 (v10.0-opt)</h1>
-    
-    <div class="config-section">
-        <h2>1. 上傳多個檔案</h2>
-        <div id="drop-area">拖曳 <b>多個</b> Excel 檔案至此，或點擊此處選擇檔案
-            <input type="file" id="file-input" accept=".xlsx,.xls" multiple>
-        </div>
-        <ul id="file-list-display"></ul>
-        <div id="progress-container"><div id="progress-bar"></div><span id="progress-text">0%</span></div>
-    </div>
-    
-    <div class="preview-section">
-        <h2>2. 檔案預覽 (第一個檔案)</h2>
-        <div id="preview-area"><p style="padding:20px;text-align:center;color:#777;">尚未載入檔案</p></div>
-    </div>
-    
-    <div class="config-section">
-        <h2>3. 設定資料範圍 (將套用至所有檔案)</h2>
-        <div class="input-group">
-            <label for="data-range">資料範圍 (含標頭列)</label>
-            <input type="text" id="data-range" placeholder="例如: A5:G50 (包含標頭那一列)">
-        </div>
-        <div class="input-group">
-            <button id="load-headers-btn" disabled>自動偵測範圍並讀取欄位</button>
-        </div>
-        <div id="auto-detect-result"></div>
-    </div>
-    
-    <div class="mapping-section">
-        <h2>4. 欄位設定與對應</h2>
-        <div class="hint-text">
-            <strong>💡 使用說明：</strong><br>
-            • <span class="role-key">主鍵欄位</span>：選擇一個欄位作為項目/科目的識別欄位（必須選擇一個）<br>
-            • <span class="role-value">加總欄位</span>：選擇要加總的數值欄位（可多選）<br>
-            • <span class="role-ignore">忽略</span>：不使用此欄位<br>
-            • 可以自訂「報表欄位名稱」，若不填寫則使用 Excel 欄位名稱
-        </div>
-        <div id="mapping-fields"></div>
-        <p id="mapping-placeholder" style="color:#777;">請先讀取欄位以顯示對應表格</p>
-    </div>
-    
-    <div class="config-section">
-        <button id="process-btn" disabled>開始彙總處理</button>
-    </div>
-    
-    <div class="output-section" id="output-area">
-        <h2>5. 彙總報告結果</h2>
-        <div class="view-tabs">
-            <button class="tab-btn active" data-view="summary-view">加總總表</button>
-            <button class="tab-btn" data-view="individual-view">個別檔案</button>
-            <button class="tab-btn" data-view="item-view">項目查詢</button>
-        </div>
-        <div id="view-content">
-            <div id="summary-view" class="view-pane active"></div>
-            <div id="individual-view" class="view-pane"></div>
-            <div id="item-view" class="view-pane">
-                <select id="item-dropdown"></select>
-                <div id="item-detail-table"></div>
-            </div>
-        </div>
-    </div>
+    <h1>基金資料彙總報告產生器 (v10.0-opt)</h1>
+    
+    <div class="config-section">
+        <h2>1. 上傳多個檔案</h2>
+        <div id="drop-area">拖曳 <b>多個</b> Excel 檔案至此，或點擊此處選擇檔案
+            <input type="file" id="file-input" accept=".xlsx,.xls" multiple>
+        </div>
+        <ul id="file-list-display"></ul>
+        <div id="progress-container"><div id="progress-bar"></div><span id="progress-text">0%</span></div>
+    </div>
+    
+    <div class="preview-section">
+        <h2>2. 檔案預覽 (第一個檔案)</h2>
+        <div id="preview-area"><p style="padding:20px;text-align:center;color:#777;">尚未載入檔案</p></div>
+    </div>
+    
+    <div class="config-section">
+        <h2>3. 設定資料範圍 (將套用至所有檔案)</h2>
+        <div class="input-group">
+            <label for="data-range">資料範圍 (含標頭列)</label>
+            <input type="text" id="data-range" placeholder="例如: A5:G50 (包含標頭那一列)">
+        </div>
+        <div class="input-group">
+            <button id="load-headers-btn" disabled>自動偵測範圍並讀取欄位</button>
+        </div>
+        <div id="auto-detect-result"></div>
+    </div>
+    
+    <div class="mapping-section">
+        <h2>4. 欄位設定與對應</h2>
+        <div class="hint-text">
+            <strong>💡 使用說明：</strong><br>
+            • <span class="role-key">主鍵欄位</span>：選擇一個欄位作為項目/科目的識別欄位（必須選擇一個）<br>
+            • <span class="role-value">加總欄位</span>：選擇要加總的數值欄位（可多選）<br>
+            • <span class="role-ignore">忽略</span>：不使用此欄位<br>
+            • 可以自訂「報表欄位名稱」，若不填寫則使用 Excel 欄位名稱
+        </div>
+        <div id="mapping-fields"></div>
+        <p id="mapping-placeholder" style="color:#777;">請先讀取欄位以顯示對應表格</p>
+    </div>
+    
+    <div class="config-section">
+        <button id="process-btn" disabled>開始彙總處理</button>
+    </div>
+    
+    <div class="output-section" id="output-area">
+        <h2>5. 彙總報告結果</h2>
+        <div class="view-tabs">
+            <button class="tab-btn active" data-view="summary-view">加總總表</button>
+            <button class="tab-btn" data-view="individual-view">個別檔案</button>
+            <button class="tab-btn" data-view="item-view">項目查詢</button>
+        </div>
+        <div id="view-content">
+            <div id="summary-view" class="view-pane active"></div>
+            <div id="individual-view" class="view-pane"></div>
+            <div id="item-view" class="view-pane">
+                <select id="item-dropdown"></select>
+                <div id="item-detail-table"></div>
+section         </div>
+        </div>
+    </div>
 </div>
 
 <script>
 const state = {
-    workbooks:[], 
-    allFileData:[], 
-    summaryData:new Map(), 
-    columnMappings:[], // [{excelCol, autoHeader, customName, role:'key'|'value'|'ignore', include:true/false}]
-    detectedRange:null
+    workbooks:[], 
+    allFileData:[], 
+    summaryData:new Map(), 
+    columnMappings:[], // [{excelCol, autoHeader, customName, role:'key'|'value'|'ignore', include:true/false}]
+    detectedRange:null
 };
 
 // DOM Elements
@@ -169,652 +169,669 @@ const autoDetectResult = document.getElementById('auto-detect-result');
 
 // 事件監聽初始化
 dropArea.addEventListener('click', () => fileInput.click());
-dropArea.addEventListener('dragover', e => {
-    e.preventDefault();
-    dropArea.style.backgroundColor = '#e6f0ff';
+
+// --- 修正 1：補全 dragenter 事件並調整 highlight 邏輯 ---
+dropArea.addEventListener('dragenter', e => {
+    e.preventDefault();
+    dropArea.style.backgroundColor = '#e6f0ff';
 });
-dropArea.addEventListener('dragleave', () => {
-    dropArea.style.backgroundColor = '#f8faff';
+dropArea.addEventListener('dragover', e => {
+    e.preventDefault(); // 必須保留，防止瀏覽器開啟檔案
+});
+dropArea.addEventListener('dragleave', e => {
+    // 只有當滑鼠離開 dropArea (而不是進入子元素) 時才恢復樣式
+    if (e.relatedTarget === null || !dropArea.contains(e.relatedTarget)) {
+        dropArea.style.backgroundColor = '#f8faff';
+    }
 });
 dropArea.addEventListener('drop', e => {
-    e.preventDefault();
-    dropArea.style.backgroundColor = '#f8faff';
-    if(e.dataTransfer.files.length > 0) {
-        fileInput.files = e.dataTransfer.files;
-        handleFiles(fileInput.files);
-    }
+    e.preventDefault();
+    dropArea.style.backgroundColor = '#f8faff';
+    if(e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files;
+        handleFiles(fileInput.files);
+    }
 });
 fileInput.addEventListener('change', e => {
-    if(e.target.files.length > 0) {
-        handleFiles(e.target.files);
-    }
+    if(e.target.files.length > 0) {
+        handleFiles(e.target.files);
+    }
 });
 loadHeadersBtn.addEventListener('click', loadHeadersAndDetectRange);
 processBtn.addEventListener('click', processData);
 itemDropdown.addEventListener('change', renderItemDetailView);
-setupTabs();
+// --- 修正 2：移除了這裡的 setupTabs() 呼叫 ---
 
 // 設定記憶
 function saveSetting() {
-    localStorage.setItem('excelMergeSettings', JSON.stringify({
-        range: dataRangeInput.value
-    }));
+    localStorage.setItem('excelMergeSettings', JSON.stringify({
+        range: dataRangeInput.value
+    }));
 }
 
 function loadSetting() {
-    try {
-        const settings = JSON.parse(localStorage.getItem('excelMergeSettings'));
-        if(settings) {
-            dataRangeInput.value = settings.range || '';
-        }
-    } catch(e) {}
+    try {
+        const settings = JSON.parse(localStorage.getItem('excelMergeSettings'));
+        if(settings) {
+            dataRangeInput.value = settings.range || '';
+        }
+    } catch(e) {}
 }
-loadSetting();
+// --- 修正 2：移除了這裡的 loadSetting() 呼叫 ---
 
 // 檔案讀取
 function readFile(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => {
-            try {
-                const workbook = XLSX.read(e.target.result, {type: 'array'});
-                resolve({file, workbook});
-            } catch(err) {
-                reject(err);
-            }
-        };
-        reader.onerror = err => reject(err);
-        reader.readAsArrayBuffer(file);
-    });
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+                const workbook = XLSX.read(e.target.result, {type: 'array'});
+                resolve({file, workbook});
+            } catch(err) {
+                reject(err);
+            }
+        };
+        reader.onerror = err => reject(err);
+        reader.readAsArrayBuffer(file);
+    });
 }
 
 async function handleFiles(fileList) {
-    if([...fileList].some(f => f.size > 10*1024*1024)) {
-        alert('檔案過大，請分批上傳！');
-        return;
-    }
-    
-    dropArea.innerHTML = '正在讀取與解析檔案...';
-    previewArea.innerHTML = '<p style="padding:20px;text-align:center;">正在讀取與解析檔案...</p>';
-    fileListDisplay.innerHTML = '';
-    state.workbooks = [];
-    progressBar.style.width = "0%";
-    progressText.textContent = "0%";
-    progressContainer.style.display = "block";
-    
-    const filePromises = Array.from(fileList).map(readFile);
-    
-    try {
-        const results = await Promise.all(filePromises.map((p, i) => p.then(res => {
-            let pct = Math.round(((i+1)/fileList.length)*100);
-            progressBar.style.width = pct + "%";
-            progressText.textContent = pct + "%";
-            return res;
-        })));
-        
-        state.workbooks = results;
-        fileListDisplay.innerHTML = '已載入檔案：' + state.workbooks.map(wb => `<li>- ${wb.file.name}</li>`).join('');
-        dropArea.innerHTML = '點擊或拖曳更換檔案';
-        dropArea.classList.add('minimized');
-        progressContainer.style.display = "none";
-        
-        generatePreview(state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]]);
-        loadHeadersBtn.disabled = false;
-        
-    } catch(err) {
-        previewArea.innerHTML = `<p style="padding:20px;text-align:center;color:red;">檔案解析失敗：${err.message}</p>`;
-        dropArea.classList.remove('minimized');
-        dropArea.innerHTML = '拖曳 <b>多個</b> Excel 檔案至此，或點擊此處選擇檔案';
-        progressContainer.style.display = "none";
-    }
+    if([...fileList].some(f => f.size > 10*1024*1024)) {
+        alert('檔案過大，請分批上傳！');
+        return;
+    }
+    
+    dropArea.innerHTML = '正在讀取與解析檔案...';
+    previewArea.innerHTML = '<p style="padding:20px;text-align:center;">正在讀取與解析檔案...</p>';
+    fileListDisplay.innerHTML = '';
+    state.workbooks = [];
+    progressBar.style.width = "0%";
+    progressText.textContent = "0%";
+    progressContainer.style.display = "block";
+    
+    const filePromises = Array.from(fileList).map(readFile);
+    
+    try {
+        const results = await Promise.all(filePromises.map((p, i) => p.then(res => {
+            let pct = Math.round(((i+1)/fileList.length)*100);
+            progressBar.style.width = pct + "%";
+            progressText.textContent = pct + "%";
+            return res;
+        })));
+        
+        state.workbooks = results;
+        fileListDisplay.innerHTML = '已載入檔案：' + state.workbooks.map(wb => `<li>- ${wb.file.name}</li>`).join('');
+        dropArea.innerHTML = '點擊或拖曳更換檔案';
+        dropArea.classList.add('minimized');
+        progressContainer.style.display = "none";
+        
+        generatePreview(state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]]);
+        loadHeadersBtn.disabled = false;
+        
+    } catch(err) {
+        previewArea.innerHTML = `<p style="padding:20px;text-align:center;color:red;">檔案解析失敗：${err.message}</p>`;
+        dropArea.classList.remove('minimized');
+        dropArea.innerHTML = '拖曳 <b>多個</b> Excel 檔案至此，或點擊此處選擇檔案';
+        progressContainer.style.display = "none";
+    }
 }
 
 // 預覽功能
 function generatePreview(sheet) {
-    if(!sheet || !sheet['!ref']) {
-        previewArea.innerHTML = '<p class="text-center text-muted">工作表為空</p>';
-        return;
-    }
-    
-    const fullRange = XLSX.utils.decode_range(sheet['!ref']);
-    const minCol = fullRange.s.c, maxCol = fullRange.e.c;
-    const minRow = fullRange.s.r, maxRow = fullRange.e.r;
-    const merges = sheet['!merges'] || [];
-    
-    let html = '<table><thead><tr><th></th>';
-    for(let C = minCol; C <= maxCol; ++C) {
-        html += '<th>' + XLSX.utils.encode_col(C) + '</th>';
-    }
-    html += '</tr></thead><tbody>';
-    
-    const totalRows = maxRow - minRow + 1;
-    const colCount = maxCol - minCol + 1;
-    
-    const renderRows = (s, e) => {
-        let range = {s:{r:s, c:minCol}, e:{r:e, c:maxCol}};
-        const rows = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            range: XLSX.utils.encode_range(range),
-            defval: ''
-        });
-        
-        rows.forEach((row, rowIdx) => {
-            const excelRowNum = s + rowIdx + 1;
-            html += '<tr><th>' + excelRowNum + '</th>';
-            for(let c = 0; c < colCount; c++) {
-                let cellAddress = XLSX.utils.encode_cell({r: s+rowIdx, c: minCol+c});
-                let isMerged = merges.find(m => 
-                    (s+rowIdx) >= m.s.r && (s+rowIdx) <= m.e.r && 
-                    (minCol+c) >= m.s.c && (minCol+c) <= m.e.c
-                );
-                html += `<td${isMerged ? ' class="merge-hint"' : ''}>${row[c] != null ? row[c] : ''}</td>`;
-            }
-            html += '</tr>';
-        });
-    };
-    
-    if(totalRows <= 11) {
-        renderRows(minRow, maxRow);
-    } else {
-        renderRows(minRow, minRow + 4);
-        html += `<tr><th>...</th><td colspan="${colCount}" class="omitted-row-cell">... (省略${totalRows-10}列) ...</td></tr>`;
-        renderRows(maxRow - 4, maxRow);
-    }
-    
-    html += '</tbody></table>';
-    previewArea.innerHTML = html;
+    if(!sheet || !sheet['!ref']) {
+        previewArea.innerHTML = '<p class="text-center text-muted">工作表為空</p>';
+        return;
+    }
+    
+    const fullRange = XLSX.utils.decode_range(sheet['!ref']);
+    const minCol = fullRange.s.c, maxCol = fullRange.e.c;
+    const minRow = fullRange.s.r, maxRow = fullRange.e.r;
+    const merges = sheet['!merges'] || [];
+    
+    let html = '<table><thead><tr><th></th>';
+    for(let C = minCol; C <= maxCol; ++C) {
+        html += '<th>' + XLSX.utils.encode_col(C) + '</th>';
+    }
+    html += '</tr></thead><tbody>';
+    
+    const totalRows = maxRow - minRow + 1;
+    const colCount = maxCol - minCol + 1;
+    
+    const renderRows = (s, e) => {
+        let range = {s:{r:s, c:minCol}, e:{r:e, c:maxCol}};
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            range: XLSX.utils.encode_range(range),
+            defval: ''
+        });
+        
+        rows.forEach((row, rowIdx) => {
+            const excelRowNum = s + rowIdx + 1;
+            html += '<tr><th>' + excelRowNum + '</th>';
+            for(let c = 0; c < colCount; c++) {
+                let cellAddress = XLSX.utils.encode_cell({r: s+rowIdx, c: minCol+c});
+                let isMerged = merges.find(m => 
+                    (s+rowIdx) >= m.s.r && (s+rowIdx) <= m.e.r && 
+                    (minCol+c) >= m.s.c && (minCol+c) <= m.e.c
+                );
+                html += `<td${isMerged ? ' class="merge-hint"' : ''}>${row[c] != null ? row[c] : ''}</td>`;
+            }
+            html += '</tr>';
+        });
+    };
+    
+    if(totalRows <= 11) {
+        renderRows(minRow, maxRow);
+    } else {
+        renderRows(minRow, minRow + 4);
+        html += `<tr><th>...</th><td colspan="${colCount}" class="omitted-row-cell">... (省略${totalRows-10}列) ...</td></tr>`;
+        renderRows(maxRow - 4, maxRow);
+    }
+    
+    html += '</tbody></table>';
+    previewArea.innerHTML = html;
 }
 
 // 自動偵測資料範圍
 function autoDetectDataRange(sheet) {
-    if(!sheet || !sheet['!ref']) return null;
-    
-    const fullRange = XLSX.utils.decode_range(sheet['!ref']);
-    const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: null});
-    
-    // 找第一個非空列作為標頭
-    let headerRowIdx = -1;
-    for(let i = 0; i < rows.length; i++) {
-        if(rows[i] && rows[i].some(cell => cell != null && String(cell).trim() !== '')) {
-            headerRowIdx = i;
-            break;
-        }
-    }
-    
-    if(headerRowIdx === -1) return null;
-    
-    // 找最後一個非空列
-    let lastDataRowIdx = headerRowIdx;
-    for(let i = rows.length - 1; i > headerRowIdx; i--) {
-        if(rows[i] && rows[i].some(cell => cell != null && String(cell).trim() !== '')) {
-            lastDataRowIdx = i;
-            break;
-        }
-    }
-    
-    // 找有效欄位範圍
-    const headerRow = rows[headerRowIdx];
-    let firstCol = 0, lastCol = headerRow.length - 1;
-    
-    // 找第一個非空欄
-    for(let c = 0; c < headerRow.length; c++) {
-        let hasData = false;
-        for(let r = headerRowIdx; r <= lastDataRowIdx; r++) {
-            if(rows[r] && rows[r][c] != null && String(rows[r][c]).trim() !== '') {
-                hasData = true;
-                break;
-            }
-        }
-        if(hasData) {
-            firstCol = c;
-            break;
-        }
-    }
-    
-    // 找最後一個非空欄
-    for(let c = headerRow.length - 1; c >= 0; c--) {
-        let hasData = false;
-        for(let r = headerRowIdx; r <= lastDataRowIdx; r++) {
-            if(rows[r] && rows[r][c] != null && String(rows[r][c]).trim() !== '') {
-                hasData = true;
-                break;
-            }
-        }
-        if(hasData) {
-            lastCol = c;
-            break;
-        }
-    }
-    
-    return {
-        range: XLSX.utils.encode_range({
-            s: {r: headerRowIdx, c: firstCol},
-            e: {r: lastDataRowIdx, c: lastCol}
-        }),
-        headerRowIdx: headerRowIdx,
-        firstCol: firstCol,
-        lastCol: lastCol
-    };
+    if(!sheet || !sheet['!ref']) return null;
+    
+    const fullRange = XLSX.utils.decode_range(sheet['!ref']);
+    const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: null});
+    
+    // 找第一個非空列作為標頭
+    let headerRowIdx = -1;
+    for(let i = 0; i < rows.length; i++) {
+        if(rows[i] && rows[i].some(cell => cell != null && String(cell).trim() !== '')) {
+            headerRowIdx = i;
+            break;
+        }
+    }
+    
+    if(headerRowIdx === -1) return null;
+    
+    // 找最後一個非空列
+    let lastDataRowIdx = headerRowIdx;
+    for(let i = rows.length - 1; i > headerRowIdx; i--) {
+        if(rows[i] && rows[i].some(cell => cell != null && String(cell).trim() !== '')) {
+            lastDataRowIdx = i;
+            break;
+        }
+    }
+    
+    // 找有效欄位範圍
+    const headerRow = rows[headerRowIdx];
+    let firstCol = 0, lastCol = headerRow.length - 1;
+    
+    // 找第一個非空欄
+    for(let c = 0; c < headerRow.length; c++) {
+        let hasData = false;
+        for(let r = headerRowIdx; r <= lastDataRowIdx; r++) {
+            if(rows[r] && rows[r][c] != null && String(rows[r][c]).trim() !== '') {
+                hasData = true;
+                break;
+            }
+        }
+        if(hasData) {
+            firstCol = c;
+            break;
+        }
+    }
+    
+    // 找最後一個非空欄
+    for(let c = headerRow.length - 1; c >= 0; c--) {
+        let hasData = false;
+        for(let r = headerRowIdx; r <= lastDataRowIdx; r++) {
+            if(rows[r] && rows[r][c] != null && String(rows[r][c]).trim() !== '') {
+                hasData = true;
+                break;
+            }
+        }
+        if(hasData) {
+            lastCol = c;
+            break;
+        }
+    }
+    
+    return {
+        range: XLSX.utils.encode_range({
+            s: {r: headerRowIdx, c: firstCol},
+            e: {r: lastDataRowIdx, c: lastCol}
+        }),
+        headerRowIdx: headerRowIdx,
+        firstCol: firstCol,
+        lastCol: lastCol
+    };
 }
 
 // 讀取標頭並建立映射表格
 function loadHeadersAndDetectRange() {
-    if(state.workbooks.length === 0) {
-        alert('請先上傳檔案');
-        return;
-    }
-    
-    const sheet = state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
-    let rangeStr = dataRangeInput.value.trim();
-    
-    // 自動偵測範圍
-    if(!rangeStr) {
-        const detected = autoDetectDataRange(sheet);
-        if(detected) {
-            rangeStr = detected.range;
-            dataRangeInput.value = rangeStr;
-            state.detectedRange = detected;
-            autoDetectResult.innerHTML = `<div class="auto-detect-info"><strong>✓ 自動偵測成功</strong><br>偵測到資料範圍：${rangeStr}</div>`;
-        } else {
-            alert('無法自動偵測範圍，請手動輸入');
-            return;
-        }
-    }
-    
-    try {
-        saveSetting();
-        
-        const range = XLSX.utils.decode_range(rangeStr);
-        const headerRowIdx = range.s.r;
-        
-        // 讀取標頭列和下一列的資料來判斷
-        const headerData = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            range: XLSX.utils.encode_range({
-                s: {r: headerRowIdx, c: range.s.c},
-                e: {r: headerRowIdx + 1, c: range.e.c}
-            }),
-            defval: ''
-        });
-        
-        const headerRow = headerData[0] || [];
-        const sampleDataRow = headerData[1] || [];
-        
-        // 建立欄位映射
-        state.columnMappings = [];
-        for(let C = range.s.c; C <= range.e.c; ++C) {
-            const colIdx = C - range.s.c;
-            const excelCol = XLSX.utils.encode_col(C);
-            const autoHeader = headerRow[colIdx] ? String(headerRow[colIdx]).trim() : '';
-            const sampleValue = sampleDataRow[colIdx];
-            
-            // 自動判斷角色
-            let autoRole = 'ignore';
-            if(autoHeader) {
-                // 包含"科目"、"項目"、"名稱"等關鍵字的設為主鍵
-                if(/科目|項目|名稱|類別|品項/.test(autoHeader)) {
-                    autoRole = 'key';
-                } 
-                // 數字欄位設為加總欄位
-                else if(typeof sampleValue === 'number' || !isNaN(parseFloat(sampleValue))) {
-                    autoRole = 'value';
-                }
-            }
-            
-            state.columnMappings.push({
-                excelCol: excelCol,
-                autoHeader: autoHeader || `(欄 ${excelCol})`,
-                customName: autoHeader || '',
-                role: autoRole,
-                include: autoRole !== 'ignore'
-            });
-        }
-        
-        renderMappingTable();
-        mappingFields.style.display = 'block';
-        mappingPlaceholder.style.display = 'none';
-        processBtn.disabled = false;
-        
-    } catch(err) {
-        alert(`讀取欄位失敗：${err.message}`);
-    }
+    if(state.workbooks.length === 0) {
+        alert('請先上傳檔案');
+        return;
+    }
+    
+    const sheet = state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
+    let rangeStr = dataRangeInput.value.trim();
+    
+    // 自動偵測範圍
+    if(!rangeStr) {
+        const detected = autoDetectDataRange(sheet);
+        if(detected) {
+            rangeStr = detected.range;
+            dataRangeInput.value = rangeStr;
+            state.detectedRange = detected;
+            autoDetectResult.innerHTML = `<div class="auto-detect-info"><strong>✓ 自動偵測成功</strong><br>偵測到資料範圍：${rangeStr}</div>`;
+i       } else {
+            alert('無法自動偵測範圍，請手動輸入');
+            return;
+        }
+    }
+    
+    try {
+        saveSetting();
+        
+        const range = XLSX.utils.decode_range(rangeStr);
+        const headerRowIdx = range.s.r;
+        
+        // 讀取標頭列和下一列的資料來判斷
+        const headerData = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            range: XLSX.utils.encode_range({
+                s: {r: headerRowIdx, c: range.s.c},
+                e: {r: headerRowIdx + 1, c: range.e.c}
+            }),
+            defval: ''
+        });
+        
+        const headerRow = headerData[0] || [];
+        const sampleDataRow = headerData[1] || [];
+        
+        // 建立欄位映射
+        state.columnMappings = [];
+        for(let C = range.s.c; C <= range.e.c; ++C) {
+            const colIdx = C - range.s.c;
+            const excelCol = XLSX.utils.encode_col(C);
+            const autoHeader = headerRow[colIdx] ? String(headerRow[colIdx]).trim() : '';
+            const sampleValue = sampleDataRow[colIdx];
+            
+            // 自動判斷角色
+            let autoRole = 'ignore';
+            if(autoHeader) {
+                // 包含"科目"、"項目"、"名稱"等關鍵字的設為主鍵
+                if(/科目|項目|名稱|類別|品項/.test(autoHeader)) {
+                    autoRole = 'key';
+                } 
+                // 數字欄位設為加總欄位
+                else if(typeof sampleValue === 'number' || !isNaN(parseFloat(sampleValue))) {
+                    autoRole = 'value';
+                }
+            }
+            
+            state.columnMappings.push({
+                excelCol: excelCol,
+                autoHeader: autoHeader || `(欄 ${excelCol})`,
+                customName: autoHeader || '',
+                role: autoRole,
+                include: autoRole !== 'ignore'
+            });
+        }
+        
+        renderMappingTable();
+        mappingFields.style.display = 'block';
+        mappingPlaceholder.style.display = 'none';
+        processBtn.disabled = false;
+        
+    } catch(err) {
+        alert(`讀取欄位失敗：${err.message}`);
+    }
 }
 
 // 渲染映射表格
 function renderMappingTable() {
-    let html = `
-    <div class="mapping-table-container">
-        <table class="mapping-table">
-            <thead>
-                <tr>
-                    <th class="col-excel">Excel 欄位</th>
-                    <th class="col-auto-header">原始標頭</th>
-                    <th class="col-custom-name">報表欄位名稱 (可自訂)</th>
-                    <th class="col-role">欄位角色</th>
-                    <th class="col-include">使用</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-    
-    state.columnMappings.forEach((col, idx) => {
-        html += `
-            <tr>
-                <td class="col-excel">${col.excelCol}</td>
-                <td class="col-auto-header">${col.autoHeader}</td>
-                <td class="col-custom-name">
-                    <input type="text" 
-                           data-idx="${idx}" 
-                           class="custom-name-input"
-                           value="${col.customName}"
-                           placeholder="輸入自訂名稱">
-                </td>
-                <td class="col-role">
-                    <select data-idx="${idx}" class="role-select">
-                        <option value="ignore" ${col.role === 'ignore' ? 'selected' : ''}>忽略</option>
-                        <option value="key" ${col.role === 'key' ? 'selected' : ''}>主鍵欄位</option>
-                        <option value="value" ${col.role === 'value' ? 'selected' : ''}>加總欄位</option>
-                    </select>
-                </td>
-                <td class="col-include">
-                    <input type="checkbox" 
-                           data-idx="${idx}" 
-                           class="include-checkbox"
-                           ${col.include ? 'checked' : ''}>
-                </td>
-            </tr>
-        `;
-    });
-    
-    html += `
-            </tbody>
-        </table>
-    </div>
-    `;
-    
-    mappingFields.innerHTML = html;
-    
-    // 綁定事件
-    document.querySelectorAll('.custom-name-input').forEach(input => {
-        input.addEventListener('input', e => {
-            const idx = parseInt(e.target.dataset.idx);
-            state.columnMappings[idx].customName = e.target.value.trim();
-        });
-    });
-    
-    document.querySelectorAll('.role-select').forEach(select => {
-        select.addEventListener('change', e => {
-            const idx = parseInt(e.target.dataset.idx);
-            state.columnMappings[idx].role = e.target.value;
-            // 自動勾選/取消勾選
-            const checkbox = document.querySelector(`.include-checkbox[data-idx="${idx}"]`);
-            if(e.target.value !== 'ignore') {
-                checkbox.checked = true;
-                state.columnMappings[idx].include = true;
-            } else {
-                checkbox.checked = false;
-                state.columnMappings[idx].include = false;
-            }
-        });
-    });
-    
-    document.querySelectorAll('.include-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', e => {
-            const idx = parseInt(e.target.dataset.idx);
-            state.columnMappings[idx].include = e.target.checked;
-        });
-    });
+    let html = `
+    <div class="mapping-table-container">
+        <table class="mapping-table">
+            <thead>
+                <tr>
+                    <th class="col-excel">Excel 欄位</th>
+                    <th class="col-auto-header">原始標頭</th>
+                    <th class="col-custom-name">報表欄位名稱 (可自訂)</th>
+                    <th class="col-role">欄位角色</th>
+                    <th class="col-include">使用</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    state.columnMappings.forEach((col, idx) => {
+        html += `
+            <tr>
+                <td class="col-excel">${col.excelCol}</td>
+                <td class="col-auto-header">${col.autoHeader}</td>
+                <td class="col-custom-name">
+                    <input type="text" 
+                           data-idx="${idx}" 
+                           class="custom-name-input"
+                           value="${col.customName}"
+                           placeholder="輸入自訂名稱">
+                </td>
+                <td class="col-role">
+                    <select data-idx="${idx}" class="role-select">
+                        <option value="ignore" ${col.role === 'ignore' ? 'selected' : ''}>忽略</option>
+                        <option value="key" ${col.role === 'key' ? 'selected' : ''}>主鍵欄位</option>
+                        <option value="value" ${col.role === 'value' ? 'selected' : ''}>加總欄位</option>
+                    </select>
+                </td>
+                <td class="col-include">
+                    <input type="checkbox" 
+                           data-idx="${idx}" 
+                           class="include-checkbox"
+                           ${col.include ? 'checked' : ''}>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+    </div>
+    `;
+    
+    mappingFields.innerHTML = html;
+    
+    // 綁定事件
+    document.querySelectorAll('.custom-name-input').forEach(input => {
+        input.addEventListener('input', e => {
+            const idx = parseInt(e.target.dataset.idx);
+            state.columnMappings[idx].customName = e.target.value.trim();
+        });
+    });
+    
+    document.querySelectorAll('.role-select').forEach(select => {
+        select.addEventListener('change', e => {
+            const idx = parseInt(e.target.dataset.idx);
+            state.columnMappings[idx].role = e.target.value;
+            // 自動勾選/取消勾選
+            const checkbox = document.querySelector(`.include-checkbox[data-idx="${idx}"]`);
+            if(e.target.value !== 'ignore') {
+                checkbox.checked = true;
+                state.columnMappings[idx].include = true;
+            } else {
+                checkbox.checked = false;
+                state.columnMappings[idx].include = false;
+            }
+        });
+    });
+    
+    document.querySelectorAll('.include-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', e => {
+            const idx = parseInt(e.target.dataset.idx);
+            state.columnMappings[idx].include = e.target.checked;
+        });
+    });
 }
 
 // 處理資料
 function processData() {
-    // 驗證映射設定
-    const keyColumns = state.columnMappings.filter(c => c.role === 'key' && c.include);
-    const valueColumns = state.columnMappings.filter(c => c.role === 'value' && c.include);
-    
-    if(keyColumns.length === 0) {
-        alert('請至少選擇一個主鍵欄位！');
-        return;
-    }
-    
-    if(keyColumns.length > 1) {
-        alert('只能選擇一個主鍵欄位！');
-        return;
-    }
-    
-    if(valueColumns.length === 0) {
-        alert('請至少選擇一個加總欄位！');
-        return;
-    }
-    
-    const keyCol = keyColumns[0];
-    const keyName = keyCol.customName || keyCol.autoHeader;
-    
-    const rangeStr = dataRangeInput.value.trim();
-    if(!rangeStr) {
-        alert('請輸入資料範圍！');
-        return;
-    }
-    
-    // 重置狀態
-    state.allFileData = [];
-    state.summaryData = new Map();
-    
-    try {
-        const range = XLSX.utils.decode_range(rangeStr);
-        const headerRowIdx = range.s.r;
-        
-        // 處理每個檔案
-        state.workbooks.forEach(wb => {
-            const sheet = wb.workbook.Sheets[wb.workbook.SheetNames[0]];
-            
-            // 讀取所有資料（不含標頭）
-            const dataRows = XLSX.utils.sheet_to_json(sheet, {
-                header: 1,
-                range: XLSX.utils.encode_range({
-                    s: {r: headerRowIdx + 1, c: range.s.c},
-                    e: {r: range.e.r, c: range.e.c}
-                }),
-                defval: null
-            });
-            
-            // 轉換資料格式
-            const transformed = [];
-            dataRows.forEach(row => {
-                if(!row || row.every(cell => cell == null || String(cell).trim() === '')) {
-                    return; // 跳過空列
-                }
-                
-                const keyColIdx = keyCol.excelCol.charCodeAt(0) - 'A'.charCodeAt(0);
-                const keyValue = row[keyColIdx];
-                
-                if(!keyValue || String(keyValue).trim() === '') {
-                    return; // 跳過主鍵為空的列
-                }
-                
-                const dataRow = {};
-                dataRow[keyName] = String(keyValue).trim();
-                
-                valueColumns.forEach(valCol => {
-                    const colIdx = valCol.excelCol.charCodeAt(0) - 'A'.charCodeAt(0);
-                    const colName = valCol.customName || valCol.autoHeader;
-                    const cellValue = row[colIdx];
-                    dataRow[colName] = toNumber(cellValue);
-                });
-                
-                transformed.push(dataRow);
-            });
-            
-            state.allFileData.push({
-                fileName: wb.file.name,
-                data: transformed
-            });
-        });
-        
-        // 彙總資料
-        state.allFileData.forEach(file => {
-            file.data.forEach(row => {
-                const key = row[keyName];
-                
-                if(!state.summaryData.has(key)) {
-                    const summaryRow = {};
-                    summaryRow[keyName] = key;
-                    
-                    valueColumns.forEach(valCol => {
-                        const colName = valCol.customName || valCol.autoHeader;
-                        summaryRow[colName] = row[colName] || 0;
-                    });
-                    
-                    state.summaryData.set(key, summaryRow);
-                } else {
-                    const summaryRow = state.summaryData.get(key);
-                    
-                    valueColumns.forEach(valCol => {
-                        const colName = valCol.customName || valCol.autoHeader;
-                        summaryRow[colName] += (row[colName] || 0);
-                    });
-                }
-            });
-        });
-        
-        // 渲染結果
-        renderSummaryView(keyName, valueColumns);
-        renderIndividualViews(keyName, valueColumns);
-        renderItemView(keyName, valueColumns);
-        
-        outputArea.style.display = 'block';
-        alert(`處理完成！\n共處理 ${state.workbooks.length} 個檔案\n彙總了 ${state.summaryData.size} 個項目`);
-        
-    } catch(err) {
-        alert(`處理資料錯誤：${err.message}`);
-        console.error(err);
-    }
+    // 驗證映射設定
+    const keyColumns = state.columnMappings.filter(c => c.role === 'key' && c.include);
+    const valueColumns = state.columnMappings.filter(c => c.role === 'value' && c.include);
+    
+    if(keyColumns.length === 0) {
+        alert('請至少選擇一個主鍵欄位！');
+        return;
+    }
+    
+    if(keyColumns.length > 1) {
+        alert('只能選擇一個主鍵欄位！');
+        return;
+    }
+    
+    if(valueColumns.length === 0) {
+        alert('請至少選擇一個加總欄位！');
+        return;
+    }
+    
+    const keyCol = keyColumns[0];
+    const keyName = keyCol.customName || keyCol.autoHeader;
+    
+    const rangeStr = dataRangeInput.value.trim();
+    if(!rangeStr) {
+        alert('請輸入資料範圍！');
+        return;
+    }
+    
+    // 重置狀態
+    state.allFileData = [];
+    state.summaryData = new Map();
+    
+    try {
+        const range = XLSX.utils.decode_range(rangeStr);
+        const headerRowIdx = range.s.r;
+        
+        // 處理每個檔案
+        state.workbooks.forEach(wb => {
+            const sheet = wb.workbook.Sheets[wb.workbook.SheetNames[0]];
+            
+            // 讀取所有資料（不含標頭）
+            const dataRows = XLSX.utils.sheet_to_json(sheet, {
+                header: 1,
+                range: XLSX.utils.encode_range({
+                    s: {r: headerRowIdx + 1, c: range.s.c},
+                    e: {r: range.e.r, c: range.e.c}
+                }),
+                defval: null
+            });
+            
+            // 轉換資料格式
+            const transformed = [];
+            dataRows.forEach(row => {
+                if(!row || row.every(cell => cell == null || String(cell).trim() === '')) {
+                    return; // 跳過空列
+                }
+                
+                const keyColIdx = keyCol.excelCol.charCodeAt(0) - 'A'.charCodeAt(0);
+                const keyValue = row[keyColIdx];
+                
+                if(!keyValue || String(keyValue).trim() === '') {
+                    return; // 跳過主鍵為空的列
+                }
+                
+                const dataRow = {};
+                dataRow[keyName] = String(keyValue).trim();
+                
+                valueColumns.forEach(valCol => {
+                    const colIdx = valCol.excelCol.charCodeAt(0) - 'A'.charCodeAt(0);
+                    const colName = valCol.customName || valCol.autoHeader;
+                    const cellValue = row[colIdx];
+                    dataRow[colName] = toNumber(cellValue);
+                });
+                
+                transformed.push(dataRow);
+            });
+            
+            state.allFileData.push({
+                fileName: wb.file.name,
+                data: transformed
+            });
+        });
+        
+        // 彙總資料
+        state.allFileData.forEach(file => {
+            file.data.forEach(row => {
+                const key = row[keyName];
+                
+                if(!state.summaryData.has(key)) {
+                    const summaryRow = {};
+                    summaryRow[keyName] = key;
+                    
+                    valueColumns.forEach(valCol => {
+                        const colName = valCol.customName || valCol.autoHeader;
+                        summaryRow[colName] = row[colName] || 0;
+                    });
+                    
+                    state.summaryData.set(key, summaryRow);
+section             } else {
+                    const summaryRow = state.summaryData.get(key);
+                    
+                    valueColumns.forEach(valCol => {
+                        const colName = valCol.customName || valCol.autoHeader;
+                        summaryRow[colName] += (row[colName] || 0);
+                    });
+                }
+            });
+        });
+        
+        // 渲染結果
+        renderSummaryView(keyName, valueColumns);
+        renderIndividualViews(keyName, valueColumns);
+        renderItemView(keyName, valueColumns);
+        
+        outputArea.style.display = 'block';
+        alert(`處理完成！\n共處理 ${state.workbooks.length} 個檔案\n彙總了 ${state.summaryData.size} 個項目`);
+config       
+    } catch(err) {
+        alert(`處理資料錯誤：${err.message}`);
+        console.error(err);
+    }
 }
 
 function toNumber(val) {
-    if(val == null || val === '') return 0;
-    if(typeof val === 'number') return val;
-    const num = parseFloat(val);
-    return isNaN(num) ? 0 : num;
+    if(val == null || val === '') return 0;
+    if(typeof val === 'number') return val;
+    const num = parseFloat(val);
+    return isNaN(num) ? 0 : num;
 }
 
 // 生成 HTML 表格
 function generateHtmlTable(data, headers, formatNumbers = false) {
-    let html = '<table class="report-table"><thead><tr>';
-    headers.forEach(h => html += `<th>${h}</th>`);
-    html += '</tr></thead><tbody>';
-    
-    data.forEach(row => {
-        html += '<tr>';
-        headers.forEach(h => {
-            const val = row[h];
-            if(formatNumbers && typeof val === 'number') {
-                html += `<td class="number">${val.toFixed(2)}</td>`;
-            } else {
-                html += `<td>${val != null ? val : ''}</td>`;
-            }
-        });
-        html += '</tr>';
-    });
-    
-    html += '</tbody></table>';
-    return html;
+Read     let html = '<table class="report-table"><thead><tr>';
+    headers.forEach(h => html += `<th>${h}</th>`);
+    html += '</tr></thead><tbody>';
+    
+    data.forEach(row => {
+        html += '<tr>';
+        headers.forEach(h => {
+            const val = row[h];
+            if(formatNumbers && typeof val === 'number') {
+                html += `<td class="number">${val.toFixed(2)}</td>`;
+Note           } else {
+                html += `<td>${val != null ? val : ''}</td>`;
+            }
+        });
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    return html;
 }
 
 // 渲染總表
 function renderSummaryView(keyName, valueColumns) {
-    const view = document.getElementById('summary-view');
-    const data = Array.from(state.summaryData.values());
-    const headers = [keyName, ...valueColumns.map(c => c.customName || c.autoHeader)];
-    view.innerHTML = '<h3>所有檔案加總結果</h3>' + generateHtmlTable(data, headers, true);
+section     const view = document.getElementById('summary-view');
+    const data = Array.from(state.summaryData.values());
+    const headers = [keyName, ...valueColumns.map(c => c.customName || c.autoHeader)];
+    view.innerHTML = '<h3>所有檔案加總結果</h3>' + generateHtmlTable(data, headers, true);
 }
 
 // 渲染個別檔案
 function renderIndividualViews(keyName, valueColumns) {
-    const view = document.getElementById('individual-view');
-    const headers = [keyName, ...valueColumns.map(c => c.customName || c.autoHeader)];
-    
-    let html = '';
-    state.allFileData.forEach(file => {
-        html += `<div class="individual-report">
-            <h3>${file.fileName}</h3>
-            ${generateHtmlTable(file.data, headers, false)}
-        </div>`;
-    });
-    
-    view.innerHTML = html;
+    const view = document.getElementById('individual-view');
+    const headers = [keyName, ...valueColumns.map(c => c.customName || c.autoHeader)];
+    
+    let html = '';
+    state.allFileData.forEach(file => {
+        html += `<div class="individual-report">
+            <h3>${file.fileName}</h3>
+            ${generateHtmlTable(file.data, headers, false)}
+        </div>`;
+    });
+    
+    view.innerHTML = html;
 }
 
 // 渲染項目查詢
 function renderItemView(keyName, valueColumns) {
-    itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的項目 ---</option>';
-    
-    Array.from(state.summaryData.keys()).sort().forEach(item => {
-        itemDropdown.innerHTML += `<option value="${item}">${item}</option>`;
-    });
-    
-    document.getElementById('item-detail-table').innerHTML = '';
-    
-    // 保存查詢配置
-    itemDropdown.dataset.keyName = keyName;
-    itemDropdown.dataset.valueColumns = JSON.stringify(valueColumns.map(c => c.customName || c.autoHeader));
+Read     itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的項目 ---</option>';
+    
+    Array.from(state.summaryData.keys()).sort().forEach(item => {
+        itemDropdown.innerHTML += `<option value="${item}">${item}</option>`;
+    });
+    
+    document.getElementById('item-detail-table').innerHTML = '';
+    
+    // 保存查詢配置
+    itemDropdown.dataset.keyName = keyName;
+    itemDropdown.dataset.valueColumns = JSON.stringify(valueColumns.map(c => c.customName || c.autoHeader));
 }
 
 // 渲染項目詳細資料
 function renderItemDetailView() {
-    const selectedItem = itemDropdown.value;
-    const container = document.getElementById('item-detail-table');
-    
-    if(!selectedItem) {
-        container.innerHTML = '';
-        return;
-    }
-    
-    const keyName = itemDropdown.dataset.keyName;
-    const valueColNames = JSON.parse(itemDropdown.dataset.valueColumns);
-    const headers = ['檔案名稱', ...valueColNames];
-    
-    const data = [];
-    
-    // 收集每個檔案的資料
-    state.allFileData.forEach(file => {
-        const row = file.data.find(r => r[keyName] === selectedItem);
-        if(row) {
-            const dataRow = {'檔案名稱': file.fileName};
-            valueColNames.forEach(colName => {
-                dataRow[colName] = row[colName] || 0;
-            });
-            data.push(dataRow);
-        }
-    });
-    
-    // 加入總計列
-    const summaryRow = state.summaryData.get(selectedItem);
-    if(summaryRow) {
-        const totalRow = {'檔案名稱': '<strong>總計</strong>'};
-        valueColNames.forEach(colName => {
-            totalRow[colName] = summaryRow[colName] || 0;
-        });
-        data.push(totalRow);
-    }
-    
-    container.innerHTML = '<h3>項目：' + selectedItem + '</h3>' + 
-                         generateHtmlTable(data, headers, true);
+Rules     const selectedItem = itemDropdown.value;
+    const container = document.getElementById('item-detail-table');
+    
+    if(!selectedItem) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    const keyName = itemDropdown.dataset.keyName;
+    const valueColNames = JSON.parse(itemDropdown.dataset.valueColumns);
+    const headers = ['檔案名稱', ...valueColNames];
+    
+    const data = [];
+    
+    // 收集每個檔案的資料
+    state.allFileData.forEach(file => {
+  Note       const row = file.data.find(r => r[keyName] === selectedItem);
+        if(row) {
+            const dataRow = {'檔案名稱': file.fileName};
+            valueColNames.forEach(colName => {
+                dataRow[colName] = row[colName] || 0;
+            });
+            data.push(dataRow);
+        }
+    });
+    
+    // 加入總計列
+    const summaryRow = state.summaryData.get(selectedItem);
+    if(summaryRow) {
+        const totalRow = {'檔案名稱': '<strong>總計</strong>'};
+        valueColNames.forEach(colName => {
+            totalRow[colName] = summaryRow[colName] || 0;
+rules         });
+        data.push(totalRow);
+    }
+    
+    container.innerHTML = '<h3>項目：' + selectedItem + '</h3>' + 
+                         generateHtmlTable(data, headers, true);
 }
 
 // 設定頁籤切換
 function setupTabs() {
-    document.querySelector('.view-tabs').addEventListener('click', e => {
-        if(e.target.classList.contains('tab-btn')) {
-            const targetView = e.target.dataset.view;
-            
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.view === targetView);
-            });
-            
-            document.querySelectorAll('.view-pane').forEach(pane => {
-                pane.classList.toggle('active', pane.id === targetView);
-            });
-        }
-    });
+    document.querySelector('.view-tabs').addEventListener('click', e => {
+        if(e.target.classList.contains('tab-btn')) {
+            const targetView = e.target.dataset.view;
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === targetView);
+            });
+            
+    Setting       document.querySelectorAll('.view-pane').forEach(pane => {
+                pane.classList.toggle('active', pane.id === targetView);
+            });
+        }
+    });
 }
+
+// --- 修正 2：將函式呼叫移至 script 結尾 ---
+// 確保所有函式都已定義後再執行
+loadSetting();
+setupTabs();
+
+</script>
+</body>
+</html>
