@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v10.1-fix)</title>
+    <title>基金資料彙總報告產生器 (v10.2-final)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body {
@@ -78,7 +78,7 @@
 </head>
 <body>
 <div id="app-container">
-    <h1>基金資料彙總報告產生器 (v10.1-fix)</h1>
+    <h1>基金資料彙總報告產生器 (v10.2-final)</h1>
     
     <div class="config-section">
         <h2>1. 上傳多個檔案</h2>
@@ -146,8 +146,7 @@ const state = {
     workbooks:[], 
     allFileData:[], 
     summaryData:new Map(), 
-    columnMappings:[], // [{excelCol, autoHeader, customName, role:'key'|'value'|'ignore', include:true/false}]
-    detectedRange:null
+    columnMappings:[],
 };
 
 // DOM Elements
@@ -167,7 +166,7 @@ const outputArea = document.getElementById('output-area');
 const itemDropdown = document.getElementById('item-dropdown');
 const autoDetectResult = document.getElementById('auto-detect-result');
 
-// 事件監聽初始化
+// --- Event Listeners Setup ---
 dropArea.addEventListener('click', () => fileInput.click());
 ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
     dropArea.addEventListener(eventName, e => e.preventDefault());
@@ -192,24 +191,19 @@ fileInput.addEventListener('change', e => {
 loadHeadersBtn.addEventListener('click', loadHeadersAndDetectRange);
 processBtn.addEventListener('click', processData);
 itemDropdown.addEventListener('change', renderItemDetailView);
+// --- FIX: Add event listener to reset mappings when range is manually changed ---
+dataRangeInput.addEventListener('input', resetMappings);
 
-// 設定記憶
-function saveSetting() {
-    localStorage.setItem('excelMergeSettings', JSON.stringify({
-        range: dataRangeInput.value
-    }));
+function resetMappings() {
+    mappingFields.style.display = 'none';
+    mappingPlaceholder.style.display = 'block';
+    mappingFields.innerHTML = '';
+    state.columnMappings = [];
+    processBtn.disabled = true;
+    autoDetectResult.innerHTML = '';
+    outputArea.style.display = 'none';
 }
 
-function loadSetting() {
-    try {
-        const settings = JSON.parse(localStorage.getItem('excelMergeSettings'));
-        if(settings) {
-            dataRangeInput.value = settings.range || '';
-        }
-    } catch(e) {}
-}
-
-// 檔案讀取
 function readFile(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -227,24 +221,26 @@ function readFile(file) {
 }
 
 async function handleFiles(fileList) {
-    if([...fileList].some(f => f.size > 10*1024*1024)) {
-        alert('檔案過大，請分批上傳！');
+    if([...fileList].some(f => f.size > 10 * 1024 * 1024)) {
+        alert('檔案過大 (超過10MB)，請分批上傳！');
         return;
     }
+    
+    // --- UX: Reset everything when new files are uploaded ---
+    resetMappings();
+    dataRangeInput.value = '';
     
     dropArea.innerHTML = '正在讀取與解析檔案...';
     previewArea.innerHTML = '<p style="padding:20px;text-align:center;">正在讀取與解析檔案...</p>';
     fileListDisplay.innerHTML = '';
     state.workbooks = [];
-    progressBar.style.width = "0%";
-    progressText.textContent = "0%";
     progressContainer.style.display = "block";
     
-    const filePromises = Array.from(fileList).map(readFile);
+    const filePromises = Array.from(fileList).map(file => readFile(file));
     
     try {
         const results = await Promise.all(filePromises.map((p, i) => p.then(res => {
-            let pct = Math.round(((i+1)/fileList.length)*100);
+            const pct = Math.round(((i + 1) / fileList.length) * 100);
             progressBar.style.width = pct + "%";
             progressText.textContent = pct + "%";
             return res;
@@ -254,7 +250,6 @@ async function handleFiles(fileList) {
         fileListDisplay.innerHTML = '已載入檔案：' + state.workbooks.map(wb => `<li>- ${wb.file.name}</li>`).join('');
         dropArea.innerHTML = '點擊或拖曳更換檔案';
         dropArea.classList.add('minimized');
-        progressContainer.style.display = "none";
         
         generatePreview(state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]]);
         loadHeadersBtn.disabled = false;
@@ -263,53 +258,39 @@ async function handleFiles(fileList) {
         previewArea.innerHTML = `<p style="padding:20px;text-align:center;color:red;">檔案解析失敗：${err.message}</p>`;
         dropArea.classList.remove('minimized');
         dropArea.innerHTML = '拖曳 <b>多個</b> Excel 檔案至此，或點擊此處選擇檔案';
+    } finally {
         progressContainer.style.display = "none";
     }
 }
 
-// 預覽功能
 function generatePreview(sheet) {
-    if(!sheet || !sheet['!ref']) {
-        previewArea.innerHTML = '<p class="text-center text-muted">工作表為空</p>';
+    if (!sheet || !sheet['!ref']) {
+        previewArea.innerHTML = '<p class="text-center text-muted">工作表為空或無法讀取</p>';
         return;
     }
     
-    const fullRange = XLSX.utils.decode_range(sheet['!ref']);
-    const maxPreviewRows = 100; // 增加預覽行數
-    const minCol = fullRange.s.c, maxCol = fullRange.e.c;
-    const minRow = fullRange.s.r, maxRow = Math.min(fullRange.e.r, minRow + maxPreviewRows - 1);
-    
-    const merges = sheet['!merges'] || [];
+    const range = XLSX.utils.decode_range(sheet['!ref']);
+    const maxPreviewRows = 100;
+    range.e.r = Math.min(range.e.r, range.s.r + maxPreviewRows);
+
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, range: range, defval: '' });
     
     let html = '<table><thead><tr><th></th>';
-    for(let C = minCol; C <= maxCol; ++C) {
-        html += '<th>' + XLSX.utils.encode_col(C) + '</th>';
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+        html += `<th>${XLSX.utils.encode_col(C)}</th>`;
     }
     html += '</tr></thead><tbody>';
 
-    const range = {s:{r:minRow, c:minCol}, e:{r:maxRow, c:maxCol}};
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-        header: 1,
-        range: XLSX.utils.encode_range(range),
-        defval: ''
-    });
-
-    rows.forEach((row, rowIdx) => {
-        const excelRowNum = minRow + rowIdx + 1;
-        html += '<tr><th>' + excelRowNum + '</th>';
-        for(let c = 0; c <= (maxCol - minCol); c++) {
-            let isMerged = merges.some(m => 
-                (minRow+rowIdx) >= m.s.r && (minRow+rowIdx) <= m.e.r && 
-                (minCol+c) >= m.s.c && (minCol+c) <= m.e.c
-            );
-            const cellValue = row[c] ?? '';
-            html += `<td${isMerged ? ' class="merge-hint"' : ''}>${cellValue}</td>`;
+    data.forEach((row, i) => {
+        html += `<tr><th>${range.s.r + i + 1}</th>`;
+        for (let j = 0; j <= (range.e.c - range.s.c); ++j) {
+            html += `<td>${row[j] ?? ''}</td>`;
         }
         html += '</tr>';
     });
-    
-    if (fullRange.e.r > maxRow) {
-        const colCount = maxCol - minCol + 1;
+
+    if (XLSX.utils.decode_range(sheet['!ref']).e.r > range.e.r) {
+        const colCount = range.e.c - range.s.c + 1;
         html += `<tr><th>...</th><td colspan="${colCount}" class="omitted-row-cell">... (僅顯示前 ${maxPreviewRows} 列) ...</td></tr>`;
     }
 
@@ -317,121 +298,81 @@ function generatePreview(sheet) {
     previewArea.innerHTML = html;
 }
 
-
-// 自動偵測資料範圍
 function autoDetectDataRange(sheet) {
-    if(!sheet || !sheet['!ref']) return null;
-    
-    const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: null});
-    
-    let headerRowIdx = -1;
-    for(let i = 0; i < rows.length; i++) {
-        if(rows[i] && rows[i].some(cell => cell != null && String(cell).trim() !== '')) {
-            headerRowIdx = i;
-            break;
-        }
-    }
-    if(headerRowIdx === -1) return null;
-    
-    let lastDataRowIdx = headerRowIdx;
-    for(let i = rows.length - 1; i > headerRowIdx; i--) {
-        if(rows[i] && rows[i].some(cell => cell != null && String(cell).trim() !== '')) {
-            lastDataRowIdx = i;
-            break;
-        }
-    }
-    
-    const headerRow = rows[headerRowIdx];
-    let firstCol = -1, lastCol = -1;
+    if (!sheet || !sheet['!ref']) return null;
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+    if (rows.length === 0) return null;
 
-    for (let c = 0; c < headerRow.length; c++) {
-        let hasDataInColumn = false;
-        for (let r = headerRowIdx; r <= lastDataRowIdx; r++) {
-            if (rows[r] && rows[r][c] != null && String(rows[r][c]).trim() !== '') {
-                hasDataInColumn = true;
-                break;
+    let headerRowIdx = rows.findIndex(row => row.some(cell => cell != null && String(cell).trim() !== ''));
+    if (headerRowIdx === -1) return null;
+
+    let lastDataRowIdx = rows.length - 1;
+    while (lastDataRowIdx > headerRowIdx && rows[lastDataRowIdx].every(cell => cell == null || String(cell).trim() === '')) {
+        lastDataRowIdx--;
+    }
+
+    let firstCol = Infinity, lastCol = -1;
+    for (let r = headerRowIdx; r <= lastDataRowIdx; r++) {
+        rows[r].forEach((cell, c) => {
+            if (cell != null && String(cell).trim() !== '') {
+                if (c < firstCol) firstCol = c;
+                if (c > lastCol) lastCol = c;
             }
-        }
-        if (hasDataInColumn) {
-            if (firstCol === -1) firstCol = c;
-            lastCol = c;
-        }
+        });
     }
     
-    if(firstCol === -1) return null;
+    if (firstCol > lastCol) return null;
 
-    return {
-        range: XLSX.utils.encode_range({
-            s: {r: headerRowIdx, c: firstCol},
-            e: {r: lastDataRowIdx, c: lastCol}
-        })
-    };
+    return XLSX.utils.encode_range({
+        s: { r: headerRowIdx, c: firstCol },
+        e: { r: lastDataRowIdx, c: lastCol }
+    });
 }
 
-// 讀取標頭並建立映射表格
 function loadHeadersAndDetectRange() {
-    if(state.workbooks.length === 0) {
-        alert('請先上傳檔案');
-        return;
-    }
+    if (state.workbooks.length === 0) return alert('請先上傳檔案');
     
     const sheet = state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
     let rangeStr = dataRangeInput.value.trim().toUpperCase();
     
-    if(!rangeStr) {
-        const detected = autoDetectDataRange(sheet);
-        if(detected && detected.range) {
-            rangeStr = detected.range;
+    if (!rangeStr) {
+        rangeStr = autoDetectDataRange(sheet);
+        if (rangeStr) {
             dataRangeInput.value = rangeStr;
             autoDetectResult.innerHTML = `<div class="auto-detect-info"><strong>✓ 自動偵測成功</strong><br>偵測到資料範圍：${rangeStr}</div>`;
         } else {
-            alert('無法自動偵測範圍，請手動輸入');
-            return;
+            return alert('無法自動偵測範圍，請手動輸入');
         }
     }
     
     try {
-        saveSetting();
-        
         const range = XLSX.utils.decode_range(rangeStr);
-        const headerRowIdx = range.s.r;
-        
         const headerData = XLSX.utils.sheet_to_json(sheet, {
             header: 1,
-            range: XLSX.utils.encode_range({
-                s: {r: headerRowIdx, c: range.s.c},
-                e: {r: headerRowIdx + 1, c: range.e.c}
-            }),
+            range: XLSX.utils.encode_range({ ...range, e: { ...range.e, r: range.s.r + 1 } }),
             defval: ''
         });
         
         const headerRow = headerData[0] || [];
-        const sampleDataRow = headerData[1] || [];
+        const sampleDataRow = headerData.length > 1 ? headerData[1] : [];
         
         state.columnMappings = [];
-        for(let C = range.s.c; C <= range.e.c; ++C) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
             const colIdx = C - range.s.c;
             const excelCol = XLSX.utils.encode_col(C);
             const autoHeader = headerRow[colIdx] ? String(headerRow[colIdx]).trim() : '';
             const sampleValue = sampleDataRow[colIdx];
             
             let autoRole = 'ignore';
-            if(autoHeader) {
-                if(/科目|項目|名稱|類別|品項/.test(autoHeader)) {
+            if (autoHeader || sampleValue) {
+                if (/科目|項目|名稱|類別|品項/.test(autoHeader)) {
                     autoRole = 'key';
-                } 
-                else if(typeof sampleValue === 'number' || (sampleValue && !isNaN(parseFloat(String(sampleValue).replace(/,/g, ''))))) {
+                } else if (typeof sampleValue === 'number' || (sampleValue && !isNaN(parseFloat(String(sampleValue).replace(/,/g, ''))))) {
                     autoRole = 'value';
                 }
             }
             
-            state.columnMappings.push({
-                excelCol: excelCol,
-                autoHeader: autoHeader || `(欄 ${excelCol})`,
-                customName: autoHeader || '',
-                role: autoRole,
-                include: autoRole !== 'ignore'
-            });
+            state.columnMappings.push({ excelCol, autoHeader, customName: autoHeader, role: autoRole, include: autoRole !== 'ignore' });
         }
         
         renderMappingTable();
@@ -440,35 +381,20 @@ function loadHeadersAndDetectRange() {
         processBtn.disabled = false;
         
     } catch(err) {
-        alert(`讀取欄位失敗：${err.message}. 請檢查資料範圍是否正確 (例如 A1:G50)`);
+        alert(`讀取欄位失敗：${err.message}. \n請檢查資料範圍格式是否正確 (例如 A1:G50)`);
+        resetMappings();
     }
 }
 
-// 渲染映射表格
 function renderMappingTable() {
-    let html = `
-    <div class="mapping-table-container">
-        <table class="mapping-table">
-            <thead>
-                <tr>
-                    <th class="col-excel">Excel 欄位</th>
-                    <th class="col-auto-header">原始標頭</th>
-                    <th class="col-custom-name">報表欄位名稱 (可自訂)</th>
-                    <th class="col-role">欄位角色</th>
-                    <th class="col-include">使用</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
+    let html = `<div class="mapping-table-container"><table class="mapping-table"><thead><tr><th>Excel 欄位</th><th>原始標頭</th><th>報表欄位名稱</th><th>欄位角色</th><th>使用</th></tr></thead><tbody>`;
     
     state.columnMappings.forEach((col, idx) => {
         html += `
             <tr>
                 <td class="col-excel">${col.excelCol}</td>
-                <td class="col-auto-header">${col.autoHeader}</td>
-                <td class="col-custom-name">
-                    <input type="text" data-idx="${idx}" class="custom-name-input" value="${col.customName}" placeholder="輸入自訂名稱">
-                </td>
+                <td class="col-auto-header">${col.autoHeader || '(空白)'}</td>
+                <td class="col-custom-name"><input type="text" data-idx="${idx}" class="custom-name-input" value="${col.customName}" placeholder="輸入自訂名稱"></td>
                 <td class="col-role">
                     <select data-idx="${idx}" class="role-select">
                         <option value="ignore" ${col.role === 'ignore' ? 'selected' : ''}>忽略</option>
@@ -476,63 +402,35 @@ function renderMappingTable() {
                         <option value="value" ${col.role === 'value' ? 'selected' : ''}>加總欄位</option>
                     </select>
                 </td>
-                <td class="col-include">
-                    <input type="checkbox" data-idx="${idx}" class="include-checkbox" ${col.include ? 'checked' : ''}>
-                </td>
+                <td class="col-include"><input type="checkbox" data-idx="${idx}" class="include-checkbox" ${col.include ? 'checked' : ''}></td>
             </tr>
         `;
     });
     
-    html += `</tbody></table></div>`;
+    mappingFields.innerHTML = html + `</tbody></table></div>`;
     
-    mappingFields.innerHTML = html;
-    
-    document.querySelectorAll('.custom-name-input').forEach(input => {
-        input.addEventListener('input', e => {
-            state.columnMappings[parseInt(e.target.dataset.idx)].customName = e.target.value.trim();
-        });
-    });
-    
-    document.querySelectorAll('.role-select').forEach(select => {
-        select.addEventListener('change', e => {
-            const idx = parseInt(e.target.dataset.idx);
-            state.columnMappings[idx].role = e.target.value;
-            const checkbox = document.querySelector(`.include-checkbox[data-idx="${idx}"]`);
-            const isIgnored = e.target.value === 'ignore';
-            checkbox.checked = !isIgnored;
-            state.columnMappings[idx].include = !isIgnored;
-        });
-    });
-    
-    document.querySelectorAll('.include-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', e => {
-            state.columnMappings[parseInt(e.target.dataset.idx)].include = e.target.checked;
-        });
-    });
+    mappingFields.querySelectorAll('.custom-name-input').forEach(i => i.addEventListener('input', e => state.columnMappings[e.target.dataset.idx].customName = e.target.value.trim()));
+    mappingFields.querySelectorAll('.include-checkbox').forEach(c => c.addEventListener('change', e => state.columnMappings[e.target.dataset.idx].include = e.target.checked));
+    mappingFields.querySelectorAll('.role-select').forEach(s => s.addEventListener('change', e => {
+        const idx = e.target.dataset.idx;
+        state.columnMappings[idx].role = e.target.value;
+        const isIgnored = e.target.value === 'ignore';
+        state.columnMappings[idx].include = !isIgnored;
+        mappingFields.querySelector(`.include-checkbox[data-idx="${idx}"]`).checked = !isIgnored;
+    }));
 }
 
-// 處理資料
 function processData() {
     const keyColumns = state.columnMappings.filter(c => c.role === 'key' && c.include);
     const valueColumns = state.columnMappings.filter(c => c.role === 'value' && c.include);
     
-    if(keyColumns.length !== 1) {
-        alert('必須且只能選擇一個主鍵欄位！');
-        return;
-    }
-    if(valueColumns.length === 0) {
-        alert('請至少選擇一個加總欄位！');
-        return;
-    }
+    if (keyColumns.length !== 1) return alert('必須且只能選擇一個主鍵欄位！');
+    if (valueColumns.length === 0) return alert('請至少選擇一個加總欄位！');
     
     const keyCol = keyColumns[0];
     const keyName = keyCol.customName || keyCol.autoHeader;
-    
     const rangeStr = dataRangeInput.value.trim();
-    if(!rangeStr) {
-        alert('請輸入資料範圍！');
-        return;
-    }
+    if (!rangeStr) return alert('請輸入資料範圍！');
     
     state.allFileData = [];
     state.summaryData = new Map();
@@ -543,66 +441,48 @@ function processData() {
         
         state.workbooks.forEach(wb => {
             const sheet = wb.workbook.Sheets[wb.workbook.SheetNames[0]];
-            const dataRange = {
-                s: {r: headerRowIdx + 1, c: range.s.c},
-                e: {r: range.e.r, c: range.e.c}
-            };
-            
-            // 確保 sheet['!ref'] 存在
-            if (!sheet['!ref']) return;
+            if (!sheet || !sheet['!ref']) return;
 
-            // 確保資料範圍不超過工作表實際範圍
             const sheetRange = XLSX.utils.decode_range(sheet['!ref']);
-            dataRange.e.r = Math.min(dataRange.e.r, sheetRange.e.r);
-            dataRange.e.c = Math.min(dataRange.e.c, sheetRange.e.c);
+            const effectiveRange = {
+                s: { r: headerRowIdx + 1, c: range.s.c },
+                e: { r: Math.min(range.e.r, sheetRange.e.r), c: Math.min(range.e.c, sheetRange.e.c) }
+            };
+            if(effectiveRange.s.r > effectiveRange.e.r || effectiveRange.s.c > effectiveRange.e.c) return;
             
-            const dataRows = XLSX.utils.sheet_to_json(sheet, {
-                header: 1,
-                range: XLSX.utils.encode_range(dataRange),
-                defval: null
-            });
+            const dataRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: effectiveRange, defval: null });
             
-            const transformed = [];
-            dataRows.forEach(row => {
-                if(!row || row.every(cell => cell == null || String(cell).trim() === '')) return;
+            const transformedData = dataRows.map(row => {
+                if (!row || row.every(cell => cell == null || String(cell).trim() === '')) return null;
                 
-                // --- FIX: Use correct column index decoding ---
                 const keyColIdx = XLSX.utils.decode_col(keyCol.excelCol) - range.s.c;
                 const keyValue = row[keyColIdx];
+                if (keyValue == null || String(keyValue).trim() === '') return null;
                 
-                if(keyValue == null || String(keyValue).trim() === '') return;
-                
-                const dataRow = {};
-                dataRow[keyName] = String(keyValue).trim();
-                
+                const dataRow = { [keyName]: String(keyValue).trim() };
                 valueColumns.forEach(valCol => {
-                    // --- FIX: Use correct column index decoding ---
                     const colIdx = XLSX.utils.decode_col(valCol.excelCol) - range.s.c;
                     const colName = valCol.customName || valCol.autoHeader;
                     dataRow[colName] = toNumber(row[colIdx]);
                 });
-                
-                transformed.push(dataRow);
-            });
+                return dataRow;
+            }).filter(Boolean); // Filter out null rows
             
-            state.allFileData.push({ fileName: wb.file.name, data: transformed });
+            state.allFileData.push({ fileName: wb.file.name, data: transformedData });
         });
         
         state.allFileData.forEach(file => {
             file.data.forEach(row => {
                 const key = row[keyName];
                 let summaryRow = state.summaryData.get(key);
-                if(!summaryRow) {
+                if (!summaryRow) {
                     summaryRow = { [keyName]: key };
-                    valueColumns.forEach(valCol => {
-                        const colName = valCol.customName || valCol.autoHeader;
-                        summaryRow[colName] = 0;
-                    });
+                    valueColumns.forEach(c => summaryRow[c.customName || c.autoHeader] = 0);
                     state.summaryData.set(key, summaryRow);
                 }
-                valueColumns.forEach(valCol => {
-                    const colName = valCol.customName || valCol.autoHeader;
-                    summaryRow[colName] += (row[colName] || 0);
+                valueColumns.forEach(c => {
+                    const colName = c.customName || c.autoHeader;
+                    summaryRow[colName] += row[colName] || 0;
                 });
             });
         });
@@ -612,7 +492,7 @@ function processData() {
         renderItemView(keyName, valueColumns);
         
         outputArea.style.display = 'block';
-        outputArea.scrollIntoView({ behavior: 'smooth' });
+        outputArea.scrollIntoView({ behavior: 'smooth' }); // UX improvement
         alert(`處理完成！\n共處理 ${state.workbooks.length} 個檔案\n彙總了 ${state.summaryData.size} 個項目`);
         
     } catch(err) {
@@ -621,15 +501,13 @@ function processData() {
     }
 }
 
-// --- OPTIMIZATION: Handle comma formatted numbers ---
 function toNumber(val) {
-    if(val == null || val === '') return 0;
-    if(typeof val === 'number') return val;
+    if (val == null || val === '') return 0;
+    if (typeof val === 'number') return val;
     const num = parseFloat(String(val).replace(/,/g, ''));
     return isNaN(num) ? 0 : num;
 }
 
-// 生成 HTML 表格
 function generateHtmlTable(data, headers, formatNumbers = false) {
     let html = '<table class="report-table"><thead><tr>';
     headers.forEach(h => html += `<th>${h}</th>`);
@@ -639,103 +517,73 @@ function generateHtmlTable(data, headers, formatNumbers = false) {
         html += '<tr>';
         headers.forEach(h => {
             const val = row[h];
-            // --- OPTIMIZATION: Use toLocaleString for better number formatting ---
-            if(formatNumbers && typeof val === 'number') {
-                html += `<td class="number">${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+            if (formatNumbers && typeof val === 'number') {
+                html += `<td class="number">${val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
             } else {
                 html += `<td>${val != null ? val : ''}</td>`;
             }
         });
         html += '</tr>';
     });
-    
-    html += '</tbody></table>';
-    return html;
+    return html + '</tbody></table>';
 }
 
-// 渲染總表
 function renderSummaryView(keyName, valueColumns) {
-    const view = document.getElementById('summary-view');
     const data = Array.from(state.summaryData.values());
     const headers = [keyName, ...valueColumns.map(c => c.customName || c.autoHeader)];
-    view.innerHTML = '<h3>所有檔案加總結果</h3>' + generateHtmlTable(data, headers, true);
+    document.getElementById('summary-view').innerHTML = '<h3>所有檔案加總結果</h3>' + generateHtmlTable(data, headers, true);
 }
 
-// 渲染個別檔案
 function renderIndividualViews(keyName, valueColumns) {
-    const view = document.getElementById('individual-view');
     const headers = [keyName, ...valueColumns.map(c => c.customName || c.autoHeader)];
-    
     let html = '';
     state.allFileData.forEach(file => {
-        html += `<div class="individual-report">
-            <h3>${file.fileName}</h3>
-            ${generateHtmlTable(file.data, headers, true)}
-        </div>`;
+        html += `<div class="individual-report"><h3>${file.fileName}</h3>${generateHtmlTable(file.data, headers, true)}</div>`;
     });
-    
-    view.innerHTML = html;
+    document.getElementById('individual-view').innerHTML = html;
 }
 
-// 渲染項目查詢
 function renderItemView(keyName, valueColumns) {
-    itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的項目 ---</option>';
-    
-    Array.from(state.summaryData.keys()).sort().forEach(item => {
-        itemDropdown.innerHTML += `<option value="${item}">${item}</option>`;
-    });
+    itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的項目 ---</option>' 
+        + Array.from(state.summaryData.keys()).sort().map(item => `<option value="${item}">${item}</option>`).join('');
     
     document.getElementById('item-detail-table').innerHTML = '';
-    
     itemDropdown.dataset.keyName = keyName;
     itemDropdown.dataset.valueColumns = JSON.stringify(valueColumns.map(c => c.customName || c.autoHeader));
 }
 
-// 渲染項目詳細資料
 function renderItemDetailView() {
     const selectedItem = itemDropdown.value;
     const container = document.getElementById('item-detail-table');
-    
-    if(!selectedItem) {
-        container.innerHTML = '';
-        return;
-    }
+    if (!selectedItem) return container.innerHTML = '';
     
     const keyName = itemDropdown.dataset.keyName;
     const valueColNames = JSON.parse(itemDropdown.dataset.valueColumns);
     const headers = ['檔案名稱', ...valueColNames];
     
-    const data = [];
-    
-    state.allFileData.forEach(file => {
+    const data = state.allFileData.map(file => {
         const row = file.data.find(r => r[keyName] === selectedItem);
-        // --- OPTIMIZATION: Only show rows with non-zero values ---
-        if(row && valueColNames.some(colName => row[colName] != 0)) {
-            const dataRow = {'檔案名稱': file.fileName};
-            valueColNames.forEach(colName => {
-                dataRow[colName] = row[colName] || 0;
-            });
-            data.push(dataRow);
+        if (row && valueColNames.some(col => row[col] != 0)) {
+            const dataRow = { '檔案名稱': file.fileName };
+            valueColNames.forEach(colName => dataRow[colName] = row[colName] || 0);
+            return dataRow;
         }
-    });
+        return null;
+    }).filter(Boolean);
     
     const summaryRow = state.summaryData.get(selectedItem);
-    if(summaryRow) {
-        const totalRow = {'檔案名稱': '<strong>總計</strong>'};
-        valueColNames.forEach(colName => {
-            totalRow[colName] = summaryRow[colName] || 0;
-        });
+    if (summaryRow) {
+        const totalRow = { '檔案名稱': '<strong>總計</strong>' };
+        valueColNames.forEach(colName => totalRow[colName] = summaryRow[colName] || 0);
         data.push(totalRow);
     }
     
-    container.innerHTML = '<h3>項目：' + selectedItem + '</h3>' + 
-                          generateHtmlTable(data, headers, true);
+    container.innerHTML = '<h3>項目：' + selectedItem + '</h3>' + generateHtmlTable(data, headers, true);
 }
 
-// 設定頁籤切換
 function setupTabs() {
     document.querySelector('.view-tabs').addEventListener('click', e => {
-        if(e.target.classList.contains('tab-btn')) {
+        if (e.target.classList.contains('tab-btn')) {
             const targetView = e.target.dataset.view;
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === targetView));
             document.querySelectorAll('.view-pane').forEach(pane => pane.classList.toggle('active', pane.id === targetView));
@@ -744,9 +592,7 @@ function setupTabs() {
 }
 
 // Initial page load setup
-loadSetting();
 setupTabs();
-
 </script>
 </body>
 </html>
