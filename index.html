@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+V<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v13.3-hotfix)</title>
+    <title>基金資料彙總報告產生器 (v13.6)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -238,8 +238,12 @@
         .alert { padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
         .alert-info { background: #d1ecf1; border-left: 4px solid #17a2b8; color: #0c5460; }
         .alert-success { background: #d4edda; border-left: 4px solid #28a745; color: #155724; }
+        /* 💡 新增 .alert-warning 樣式 */
+        .alert-warning { background: #fff3cd; border-left: 4px solid #ffc107; color: #664d03; }
+        
         .alert::before { content: 'ℹ️'; font-size: 1.5em; }
         .alert-success::before { content: '✅'; }
+        .alert-warning::before { content: '⚠️'; } /* 💡 新增 .alert-warning 樣式 */
         
         .empty-state { text-align: center; padding: 60px 20px; color: #999; }
         .empty-state::before { content: '📊'; font-size: 4em; display: block; margin-bottom: 15px; opacity: 0.5; }
@@ -254,11 +258,12 @@
         }
     </style>
 </head>
+
 <body>
     <div id="app-container">
         <div class="app-header">
             <h1>📊 基金資料彙總報告產生器</h1>
-            <div class="version">v13.3-hotfix</div>
+            <div class="version">v13.6 - 結構驗證</div>
         </div>
         
         <div class="progress-steps">
@@ -305,7 +310,14 @@
             
             <div class="section" id="section-mapping" style="display:none;">
                 <h2 class="section-title">欄位設定與對應</h2>
-                <div class="alert alert-info">💡 請選擇一個<strong>主鍵欄位</strong>（項目/科目），並選擇要<strong>加總的數值欄位</strong>。</div>
+                <div class="alert alert-info">💡 請選擇一個<strong>主鍵欄位</strong>(項目/科目),並選擇要<strong>加總的數值欄位</strong>。</div>
+                <div class="form-row" style="margin-bottom:20px;">
+                    <button class="btn btn-success" id="transpose-btn" data-icon="🔄">欄列轉置</button>
+                    <div class="form-group" id="transpose-controls" style="display:none;">
+                        <label class="form-label">轉置後的主鍵欄位</label>
+                        <select id="transpose-key-select" style="width:auto; min-width:200px;"></select>
+                    </div>
+                </div>
                 <div id="mapping-fields"></div>
                 <div class="form-row" style="margin-top:20px;">
                     <button class="btn btn-primary" id="process-btn" data-icon="⚡">開始彙總處理</button>
@@ -313,6 +325,8 @@
             </div>
             
             <div class="output-section" id="output-area">
+                <div id="validation-warnings" style="margin-bottom: 20px;"></div>
+                
                 <h2 class="section-title">彙總報告結果</h2>
                 <div class="view-tabs">
                     <button class="tab-btn active" data-view="summary-view">📊 加總總表</button>
@@ -333,418 +347,782 @@
             </div>
         </div>
     </div>
-
-<script>
-const state = { workbooks: [], columnMappings: [], allFileData:[], summaryData:new Map(), orderedItemKeys: [] };
-
-const dropArea = document.getElementById('drop-area');
-const fileInput = document.getElementById('file-input');
-const fileListContainer = document.getElementById('file-list-container');
-const previewArea = document.getElementById('preview-area');
-const mappingFields = document.getElementById('mapping-fields');
-const processBtn = document.getElementById('process-btn');
-const outputArea = document.getElementById('output-area');
-const itemDropdown = document.getElementById('item-dropdown');
-const autoDetectBtn = document.getElementById('auto-detect-btn');
-const dataRangeInput = document.getElementById('data-range-input');
-const headerRowsInput = document.getElementById('header-rows-input');
-const loadHeadersBtn = document.getElementById('load-headers-btn');
-const fileDropdown = document.getElementById('file-dropdown');
-const fileDetailTable = document.getElementById('file-detail-table');
-const detectResult = document.getElementById('detect-result');
-
-function updateStep(stepNum, status = 'active') {
-    document.querySelectorAll('.step').forEach((step, i) => {
-        step.classList.remove('active', 'completed');
-        if (i + 1 < stepNum) step.classList.add('completed');
-        if (i + 1 === stepNum) step.classList.add(status);
-    });
-}
-
-dropArea.addEventListener('click', () => fileInput.click());
-['dragenter', 'dragover'].forEach(e => dropArea.addEventListener(e, evt => {
-    evt.preventDefault(); dropArea.classList.add('drag-over');
-}));
-['dragleave', 'drop'].forEach(e => dropArea.addEventListener(e, evt => {
-    evt.preventDefault(); dropArea.classList.remove('drag-over');
-}));
-dropArea.addEventListener('drop', e => { if(e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
-fileInput.addEventListener('change', e => { if(e.target.files.length) handleFiles(e.target.files); });
-autoDetectBtn.addEventListener('click', autoDetectBestRange);
-loadHeadersBtn.addEventListener('click', loadHeadersAndMapping);
-processBtn.addEventListener('click', processData);
-itemDropdown.addEventListener('change', renderItemDetailView);
-fileDropdown.addEventListener('change', renderFileDetailView);
-[dataRangeInput, headerRowsInput].forEach(input => input.addEventListener('input', resetMappings));
-
-function resetUI() {
-    resetMappings();
-    dataRangeInput.value = '';
-    headerRowsInput.value = '1';
-    detectResult.innerHTML = '';
-    fileListContainer.innerHTML = '';
-    document.getElementById('section-preview').style.display = 'none';
-    document.getElementById('section-range').style.display = 'none';
-    document.getElementById('section-mapping').style.display = 'none';
-    updateStep(1);
-}
-
-function resetMappings() {
-    document.getElementById('section-mapping').style.display = 'none';
-    state.columnMappings = [];
-    processBtn.disabled = true;
-    outputArea.style.display = 'none';
-}
-
-async function handleFiles(fileList) {
-    resetUI();
-    previewArea.innerHTML = '<div class="empty-state">正在讀取檔案...</div>';
-    try {
-        state.workbooks = await Promise.all(Array.from(fileList).map(readFile));
-        const fileListHtml = `
-            <details class="file-list-details">
-                <summary class="file-list-summary">
-                    ✓ 已載入 ${state.workbooks.length} 個檔案 (點擊查看清單)
-                </summary>
-                <div class="file-list">
-                    ${state.workbooks.map(wb => 
-                        `<div class="file-item"><span>${wb.file.name}</span></div>`
-                    ).join('')}
-                </div>
-            </details>
-        `;
-        fileListContainer.innerHTML = fileListHtml;
-        generatePreview(state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]]);
-        document.getElementById('section-preview').style.display = 'block';
-        updateStep(2);
-    } catch(err) {
-        previewArea.innerHTML = `<div class="empty-state" style="color:#dc3545;">檔案解析失敗：${err.message}</div>`;
-    }
-}
-
-function readFile(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => resolve({file, workbook: XLSX.read(e.target.result, {type: 'array'})});
-        reader.onerror = err => reject(err);
-        reader.readAsArrayBuffer(file);
-    });
-}
-
-function generatePreview(sheet) {
-    if (!sheet || !sheet['!ref']) {
-        previewArea.innerHTML = '<div class="empty-state">工作表為空</div>';
-        return;
-    }
-    const range = XLSX.utils.decode_range(sheet['!ref']);
-    range.e.r = Math.min(range.e.r, range.s.r + 100);
-    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, range: range, defval: '' });
-    let html = '<table><thead><tr><th></th>';
-    for (let C = range.s.c; C <= range.e.c; ++C) html += `<th>${XLSX.utils.encode_col(C)}</th>`;
-    html += '</tr></thead><tbody>';
-    data.forEach((row, i) => {
-        html += `<tr><th>${range.s.r + i + 1}</th>`;
-        (row || []).forEach(cell => html += `<td>${cell ?? ''}</td>`);
-        html += '</tr>';
-    });
-    previewArea.innerHTML = html + '</tbody></table>';
-}
-
-const isRowEmpty = (row) => !row || row.every(cell => cell == null || String(cell).trim() === '');
-
-function autoDetectBestRange() {
-    if (state.workbooks.length === 0) return;
-    resetMappings();
-    const sheet = state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
-    if (!sheet || !sheet['!ref']) {
-        showDetectResult('工作表為空', 'error');
-        return;
-    }
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-    if (rows.length === 0) {
-        showDetectResult('工作表內沒有資料', 'error');
-        return;
-    }
-    let headerRowIdx = -1;
-    for (let i = 0; i < Math.min(rows.length, 30); i++) {
-        if ((rows[i]?.filter(c => c != null && String(c).trim() !== '').length || 0) > 2) {
-            headerRowIdx = i; break;
+    <script>
+        const state = { 
+            workbooks: [], 
+            columnMappings: [], 
+            allFileData: [], 
+            summaryData: new Map(), 
+            orderedItemKeys: [], 
+            isTransposed: false, 
+            originalData: null, 
+            transposeKeyIndex: null 
+        };
+        
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('file-input');
+        const fileListContainer = document.getElementById('file-list-container');
+        const previewArea = document.getElementById('preview-area');
+        const mappingFields = document.getElementById('mapping-fields');
+        const processBtn = document.getElementById('process-btn');
+        const outputArea = document.getElementById('output-area');
+        const itemDropdown = document.getElementById('item-dropdown');
+        const autoDetectBtn = document.getElementById('auto-detect-btn');
+        const dataRangeInput = document.getElementById('data-range-input');
+        const headerRowsInput = document.getElementById('header-rows-input');
+        const loadHeadersBtn = document.getElementById('load-headers-btn');
+        const fileDropdown = document.getElementById('file-dropdown');
+        const fileDetailTable = document.getElementById('file-detail-table');
+        const detectResult = document.getElementById('detect-result');
+        const transposeBtn = document.getElementById('transpose-btn');
+        const transposeKeySelect = document.getElementById('transpose-key-select');
+        const transposeControls = document.getElementById('transpose-controls');
+        
+        function updateStep(stepNum, status = 'active') {
+            document.querySelectorAll('.step').forEach((step, i) => {
+                step.classList.remove('active', 'completed');
+                if (i + 1 < stepNum) step.classList.add('completed');
+                if (i + 1 === stepNum) step.classList.add(status);
+            });
         }
-    }
-    if (headerRowIdx === -1) {
-        showDetectResult('找不到有效的標頭列', 'error');
-        return;
-    }
-    let lastDataRowIdx = headerRowIdx;
-    for (let i = rows.length - 1; i > headerRowIdx; i--) {
-        if (!isRowEmpty(rows[i])) { lastDataRowIdx = i; break; }
-    }
-    let firstCol = Infinity, lastCol = -1;
-    for (let r = headerRowIdx; r <= lastDataRowIdx; r++) {
-        if (!rows[r]) continue;
-        rows[r].forEach((cell, c) => {
-            if (cell != null && String(cell).trim() !== '') {
-                firstCol = Math.min(firstCol, c);
-                lastCol = Math.max(lastCol, c);
+        
+        dropArea.addEventListener('click', () => fileInput.click());
+        ['dragenter', 'dragover'].forEach(e => dropArea.addEventListener(e, evt => {
+            evt.preventDefault(); 
+            dropArea.classList.add('drag-over');
+        }));
+        ['dragleave', 'drop'].forEach(e => dropArea.addEventListener(e, evt => {
+            evt.preventDefault(); 
+            dropArea.classList.remove('drag-over');
+        }));
+        dropArea.addEventListener('drop', e => { 
+            if(e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); 
+        });
+        fileInput.addEventListener('change', e => { 
+            if(e.target.files.length) handleFiles(e.target.files); 
+        });
+        autoDetectBtn.addEventListener('click', autoDetectBestRange);
+        loadHeadersBtn.addEventListener('click', loadHeadersAndMapping);
+        processBtn.addEventListener('click', processData);
+        itemDropdown.addEventListener('change', renderItemDetailView);
+        fileDropdown.addEventListener('change', renderFileDetailView);
+        [dataRangeInput, headerRowsInput].forEach(input => input.addEventListener('input', resetMappings));
+        transposeBtn.addEventListener('click', transposeData);
+        transposeKeySelect.addEventListener('change', applyTranspose);
+        
+        function resetUI() {
+            resetMappings();
+            dataRangeInput.value = '';
+            headerRowsInput.value = '1';
+            detectResult.innerHTML = '';
+            fileListContainer.innerHTML = '';
+            document.getElementById('section-preview').style.display = 'none';
+            document.getElementById('section-range').style.display = 'none';
+            document.getElementById('section-mapping').style.display = 'none';
+            updateStep(1);
+        }
+        
+        function resetMappings() {
+            document.getElementById('section-mapping').style.display = 'none';
+            state.columnMappings = [];
+            state.isTransposed = false;
+            state.originalData = null;
+            state.transposeKeyIndex = null;
+            transposeControls.style.display = 'none';
+            transposeBtn.textContent = '🔄 欄列轉置';
+            processBtn.disabled = true;
+            outputArea.style.display = 'none';
+        }
+        
+        async function handleFiles(fileList) {
+            resetUI();
+            previewArea.innerHTML = '<div class="empty-state">正在讀取檔案...</div>';
+            try {
+                state.workbooks = await Promise.all(Array.from(fileList).map(readFile));
+                const fileListHtml = `
+                    <details class="file-list-details">
+                        <summary class="file-list-summary">
+                            ✓ 已載入 ${state.workbooks.length} 個檔案 (點擊查看清單)
+                        </summary>
+                        <div class="file-list">
+                            ${state.workbooks.map(wb => 
+                                `<div class="file-item"><span>${wb.file.name}</span></div>`
+                            ).join('')}
+                        </div>
+                    </details>
+                `;
+                fileListContainer.innerHTML = fileListHtml;
+                generatePreview(state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]]);
+                document.getElementById('section-preview').style.display = 'block';
+                updateStep(2);
+            } catch(err) {
+                previewArea.innerHTML = `<div class="empty-state" style="color:#dc3545;">檔案解析失敗：${err.message}</div>`;
             }
-        });
-    }
-    if (firstCol > lastCol) {
-        showDetectResult('找不到有效的資料欄', 'error');
-        return;
-    }
-    const detectedRange = { s: { r: headerRowIdx, c: firstCol }, e: { r: lastDataRowIdx, c: lastCol } };
-    const rangeStr = XLSX.utils.encode_range(detectedRange);
-    dataRangeInput.value = rangeStr;
-    const blockRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: detectedRange, defval: null });
-    let firstDataRowIndex = -1;
-    for (let i = 1; i < blockRows.length; i++) {
-        if (blockRows[i] && blockRows[i].slice(1).some(cell => cell != null && !isNaN(Number(cell)))) {
-            firstDataRowIndex = i;
-            break;
         }
-    }
-    const headerCount = (firstDataRowIndex > 0) ? firstDataRowIndex : 1;
-    headerRowsInput.value = headerCount;
-    showDetectResult(`成功偵測到範圍：${rangeStr}，並預設標頭佔 ${headerCount} 列`, 'success');
-    document.getElementById('section-range').style.display = 'block';
-    updateStep(2, 'completed');
-    updateStep(3);
-}
-
-function showDetectResult(message, type) {
-    const className = type === 'success' ? 'alert-success' : 'alert-info';
-    detectResult.innerHTML = `<div class="alert ${className}">${message}</div>`;
-}
-
-function unmergeAndFill(data, sheet, range) {
-    (sheet['!merges'] || []).forEach(merge => {
-        if (merge.s.c > range.e.c || merge.e.c < range.s.c || merge.s.r > range.e.r || merge.e.r < range.s.r) return;
-        const s = { r: merge.s.r - range.s.r, c: merge.s.c - range.s.c };
-        if (s.r < 0 || s.c < 0 || s.r >= data.length || !data[s.r]) return;
-        const val = data[s.r][s.c];
-        for (let r = s.r; r <= merge.e.r - range.s.r; r++) {
-            if (r >= data.length) break;
-            if (!data[r]) data[r] = [];
-            for (let c = s.c; c <= merge.e.c - range.s.c; c++) data[r][c] = val;
+        
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve({file, workbook: XLSX.read(e.target.result, {type: 'array'})});
+                reader.onerror = err => reject(err);
+                reader.readAsArrayBuffer(file);
+            });
         }
-    });
-    return data;
-}
-
-function loadHeadersAndMapping() {
-    const rangeStr = dataRangeInput.value.trim().toUpperCase();
-    const headerRowCount = parseInt(headerRowsInput.value, 10);
-    if (!rangeStr || isNaN(headerRowCount) || headerRowCount < 1) return alert('請輸入有效的範圍和標頭列數');
-    try {
-        const sheet = state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
-        const range = XLSX.utils.decode_range(rangeStr);
-        if (headerRowCount > (range.e.r - range.s.r + 1)) return alert("標頭列數過大。");
-        const headerBlockRange = { s: range.s, e: { c: range.e.c, r: range.s.r + headerRowCount - 1 } };
-        let headerData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: headerBlockRange, defval: null });
-        headerData = unmergeAndFill(headerData, sheet, headerBlockRange);
-        const finalHeaders = Array.from({ length: range.e.c - range.s.c + 1 }, (_, c) => 
-            Array.from({ length: headerRowCount }, (_, r) => headerData[r]?.[c] || '')
-            .map(s => String(s).trim())
-            .filter((v, i, a) => v && a.indexOf(v) === i)
-            .join(' ')
-        );
-        state.columnMappings = finalHeaders.map((header, i) => {
-            const excelCol = XLSX.utils.encode_col(range.s.c + i);
-            const autoRole = (i === 0) ? 'key' : (!header ? 'ignore' : 'value');
-            return { excelCol, autoHeader: header || `(空白欄 ${excelCol})`, customName: header || '', role: autoRole, include: autoRole !== 'ignore' };
-        });
-        renderMappingTable();
-        document.getElementById('section-mapping').style.display = 'block';
-        updateStep(3, 'completed');
-    } catch(err) {
-        showDetectResult(`讀取欄位失敗：${err.message}`, 'error');
-        resetMappings();
-    }
-}
-
-function renderMappingTable() {
-    let html = `<div class="mapping-table-wrapper"><table class="mapping-table"><thead><tr><th style="width:100px;">Excel 欄位</th><th>原始標頭</th><th>報表欄位名稱</th><th style="width:150px;">欄位角色</th><th style="width:80px;">使用</th></tr></thead><tbody>`;
-    state.columnMappings.forEach((col, idx) => {
-        html += `
-            <tr>
-                <td><span class="excel-col">${col.excelCol}</span></td><td>${col.autoHeader}</td>
-                <td><input type="text" data-idx="${idx}" class="custom-name-input" value="${col.customName}"></td>
-                <td>
-                    <select data-idx="${idx}" class="role-select">
-                        <option value="ignore" ${col.role === 'ignore' ? 'selected' : ''}>忽略</option>
-                        <option value="key" ${col.role === 'key' ? 'selected' : ''}>主鍵欄位</option>
-                        <option value="value" ${col.role === 'value' ? 'selected' : ''}>加總欄位</option>
-                    </select>
-                </td>
-                <td style="text-align:center;"><input type="checkbox" data-idx="${idx}" class="include-checkbox" ${col.include ? 'checked' : ''}></td>
-            </tr>`;
-    });
-    mappingFields.innerHTML = html + `</tbody></table></div>`;
-    
-    mappingFields.querySelectorAll('.custom-name-input').forEach(i=>i.addEventListener('input', e=>state.columnMappings[e.target.dataset.idx].customName=e.target.value.trim()));
-    mappingFields.querySelectorAll('.include-checkbox').forEach(c=>c.addEventListener('change', e=>state.columnMappings[e.target.dataset.idx].include=e.target.checked));
-    mappingFields.querySelectorAll('.role-select').forEach(s=>s.addEventListener('change', e=>{
-        const idx = e.target.dataset.idx, isIgnored = e.target.value === 'ignore';
-        state.columnMappings[idx].role = e.target.value;
-        state.columnMappings[idx].include = !isIgnored;
-        mappingFields.querySelector(`.include-checkbox[data-idx="${idx}"]`).checked = !isIgnored;
-    }));
-    processBtn.disabled = false;
-}
-
-function processData() {
-    const keyColumns = state.columnMappings.filter(c => c.role === 'key' && c.include);
-    const valueColumns = state.columnMappings.filter(c => c.role === 'value' && c.include);
-    if (keyColumns.length !== 1) return alert('⚠️ 必須選擇一個主鍵欄位！');
-    if (valueColumns.length === 0) return alert('⚠️ 請至少選擇一個加總欄位！');
-    const keyCol = keyColumns[0], keyName = keyCol.customName || keyCol.autoHeader;
-    const rangeStr = dataRangeInput.value.trim();
-    if (!rangeStr) return alert('⚠️ 請輸入資料範圍！');
-    state.allFileData = [], state.summaryData = new Map(), state.orderedItemKeys = [];
-    try {
-        const range = XLSX.utils.decode_range(rangeStr);
-        const dataRange = { s: { r: range.s.r + parseInt(headerRowsInput.value, 10), c: range.s.c }, e: range.e };
-        state.workbooks.forEach(wb => {
-            const sheet = wb.workbook.Sheets[wb.workbook.SheetNames[0]];
-            if (!sheet || !sheet['!ref']) return;
-            let dataRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: dataRange, defval: null });
-            dataRows = unmergeAndFill(dataRows, sheet, dataRange);
-            const keyColIndex = XLSX.utils.decode_col(keyCol.excelCol) - range.s.c;
-            const transformedData = dataRows.map(row => {
-                if (isRowEmpty(row)) return null;
-                const keyValue = row[keyColIndex];
-                if (keyValue == null || String(keyValue).trim() === '') return null;
-                const dataRow = { [keyName]: String(keyValue).trim() };
-                valueColumns.forEach(valCol => {
-                    const colIdx = XLSX.utils.decode_col(valCol.excelCol) - range.s.c;
-                    dataRow[valCol.customName || valCol.autoHeader] = toNumber(row[colIdx]);
+        
+        function generatePreview(sheet) {
+            if (!sheet || !sheet['!ref']) {
+                previewArea.innerHTML = '<div class="empty-state">工作表為空</div>';
+                return;
+            }
+            const range = XLSX.utils.decode_range(sheet['!ref']);
+            range.e.r = Math.min(range.e.r, range.s.r + 100);
+            const data = XLSX.utils.sheet_to_json(sheet, { header: 1, range: range, defval: '' });
+            let html = '<table><thead><tr><th></th>';
+            for (let C = range.s.c; C <= range.e.c; ++C) html += `<th>${XLSX.utils.encode_col(C)}</th>`;
+            html += '</tr></thead><tbody>';
+            data.forEach((row, i) => {
+                html += `<tr><th>${range.s.r + i + 1}</th>`;
+                (row || []).forEach(cell => html += `<td>${cell ?? ''}</td>`);
+                html += '</tr>';
+            });
+            previewArea.innerHTML = html + '</tbody></table>';
+        }
+        
+        const isRowEmpty = (row) => !row || row.every(cell => cell == null || String(cell).trim() === '');
+              function autoDetectBestRange() {
+            if (state.workbooks.length === 0) return;
+            resetMappings();
+            const sheet = state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
+            if (!sheet || !sheet['!ref']) {
+                showDetectResult('工作表為空', 'error');
+                return;
+            }
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+            if (rows.length === 0) {
+                showDetectResult('工作表內沒有資料', 'error');
+                return;
+            }
+            let headerRowIdx = -1;
+            for (let i = 0; i < Math.min(rows.length, 30); i++) {
+                if ((rows[i]?.filter(c => c != null && String(c).trim() !== '').length || 0) > 2) {
+                    headerRowIdx = i;
+                    break;
+                }
+            }
+            if (headerRowIdx === -1) {
+                showDetectResult('找不到有效的標頭列', 'error');
+                return;
+            }
+            let lastDataRowIdx = headerRowIdx;
+            for (let i = rows.length - 1; i > headerRowIdx; i--) {
+                if (!isRowEmpty(rows[i])) {
+                    lastDataRowIdx = i;
+                    break;
+                }
+            }
+            let firstCol = Infinity, lastCol = -1;
+            for (let r = headerRowIdx; r <= lastDataRowIdx; r++) {
+                if (!rows[r]) continue;
+                rows[r].forEach((cell, c) => {
+                    if (cell != null && String(cell).trim() !== '') {
+                        firstCol = Math.min(firstCol, c);
+                        lastCol = Math.max(lastCol, c);
+                    }
                 });
-                return dataRow;
-            }).filter(Boolean);
-            state.allFileData.push({ fileName: wb.file.name, data: transformedData });
-        });
-        const seenKeys = new Set();
-        state.allFileData.forEach(file => {
-            file.data.forEach(row => {
-                const key = row[keyName];
-                if (!seenKeys.has(key)) {
-                    seenKeys.add(key);
-                    state.orderedItemKeys.push(key);
+            }
+            if (firstCol > lastCol) {
+                showDetectResult('找不到有效的資料欄', 'error');
+                return;
+            }
+            const detectedRange = { s: { r: headerRowIdx, c: firstCol }, e: { r: lastDataRowIdx, c: lastCol } };
+            const rangeStr = XLSX.utils.encode_range(detectedRange);
+            dataRangeInput.value = rangeStr;
+            const blockRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: detectedRange, defval: null });
+            let firstDataRowIndex = -1;
+            for (let i = 1; i < blockRows.length; i++) {
+                if (blockRows[i] && blockRows[i].slice(1).some(cell => cell != null && !isNaN(Number(cell)))) {
+                    firstDataRowIndex = i;
+                    break;
+                }
+            }
+            const headerCount = (firstDataRowIndex > 0) ? firstDataRowIndex : 1;
+            headerRowsInput.value = headerCount;
+            showDetectResult(`成功偵測到範圍：${rangeStr}，並預設標頭佔 ${headerCount} 列`, 'success');
+            document.getElementById('section-range').style.display = 'block';
+            updateStep(2, 'completed');
+            updateStep(3);
+        }
+        
+        function showDetectResult(message, type) {
+            const className = type === 'success' ? 'alert-success' : 'alert-info';
+            detectResult.innerHTML = `<div class="alert ${className}">${message}</div>`;
+        }
+        
+        function unmergeAndFill(data, sheet, range) {
+            (sheet['!merges'] || []).forEach(merge => {
+                if (merge.s.c > range.e.c || merge.e.c < range.s.c || merge.s.r > range.e.r || merge.e.r < range.s.r) return;
+                const s = { r: merge.s.r - range.s.r, c: merge.s.c - range.s.c };
+                if (s.r < 0 || s.c < 0 || s.r >= data.length || !data[s.r]) return;
+                const val = data[s.r][s.c];
+                for (let r = s.r; r <= merge.e.r - range.s.r; r++) {
+                    if (r >= data.length) break;
+                    if (!data[r]) data[r] = [];
+                    for (let c = s.c; c <= merge.e.c - range.s.c; c++) data[r][c] = val;
                 }
             });
-        });
-        state.allFileData.forEach(file => file.data.forEach(row => {
-            const key = row[keyName];
-            let summaryRow = state.summaryData.get(key) || { [keyName]: key, ...Object.fromEntries(valueColumns.map(c => [c.customName || c.autoHeader, 0])) };
-            valueColumns.forEach(c => summaryRow[c.customName || c.autoHeader] += row[c.customName || c.autoHeader] || 0);
-            state.summaryData.set(key, summaryRow);
-        }));
-        renderSummaryView(keyName, valueColumns);
-        renderFileQueryView(keyName, valueColumns);
-        renderItemView(keyName, valueColumns);
-        outputArea.style.display = 'block';
-        updateStep(4, 'completed');
-        outputArea.scrollIntoView({ behavior: 'smooth' });
-        alert(`✅ 處理完成！\n\n共處理 ${state.workbooks.length} 個檔案\n彙總了 ${state.summaryData.size} 個項目`);
-    } catch(err) {
-        alert(`❌ 處理資料錯誤：${err.message}`);
-        console.error(err);
-    }
-}
-
-function toNumber(val) {
-    if (val == null || val === '') return 0;
-    if (typeof val === 'number') return val;
-    return parseFloat(String(val).replace(/,/g, '')) || 0;
-}
-
-function generateHtmlTable(data, headers, formatNumbers = false, firstRowClass = '') {
-    let html = '<table class="report-table"><thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
-    data.forEach((row, index) => {
-        const rowClass = (index === 0 && firstRowClass) ? ` class="${firstRowClass}"` : '';
-        html += `<tr${rowClass}>` + headers.map(h => {
-            const val = row[h];
-            if (formatNumbers && h !== '檔案名稱' && typeof val === 'number') {
-                return `<td class="number">${val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>`;
-            }
-            return `<td>${val ?? ''}</td>`;
-        }).join('') + '</tr>';
-    });
-    return html + '</tbody></table>';
-}
-
-function renderSummaryView(keyName, valueColumns) {
-    const headers = [keyName, ...valueColumns.map(c => c.customName || c.autoHeader)];
-    const data = Array.from(state.summaryData.values());
-    document.getElementById('summary-view').innerHTML = `<h3 style="margin-bottom:20px; color:#667eea;">📊 所有檔案加總結果 (共 ${data.length} 項)</h3>` + generateHtmlTable(data, headers, true);
-}
-
-function renderFileQueryView(keyName, valueColumns) {
-    fileDropdown.innerHTML = '<option value="">--- 請選擇要查詢的檔案 ---</option>' + 
-        state.workbooks.map(wb => `<option value="${wb.file.name}">${wb.file.name}</option>`).join('');
-    fileDetailTable.innerHTML = '';
-    fileDropdown.dataset.keyName = keyName;
-    fileDropdown.dataset.valueColumns = JSON.stringify(valueColumns.map(c => c.customName || c.autoHeader));
-}
-
-function renderFileDetailView() {
-    const selectedFilename = fileDropdown.value;
-    const container = fileDetailTable;
-    if (!selectedFilename) return container.innerHTML = '';
-    const keyName = fileDropdown.dataset.keyName;
-    const valueColNames = JSON.parse(fileDropdown.dataset.valueColumns);
-    const headers = [keyName, ...valueColNames];
-    const fileData = state.allFileData.find(file => file.fileName === selectedFilename);
-    if (!fileData) {
-        container.innerHTML = '<div class="empty-state">找不到該檔案的處理後資料</div>';
-        return;
-    }
-    container.innerHTML = `<h3 style="margin-bottom:20px; color:#667eea;">📁 ${selectedFilename} (共 ${fileData.data.length} 項)</h3>` + generateHtmlTable(fileData.data, headers, true);
-}
-
-function renderItemView(keyName, valueColumns) {
-    itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的項目 ---</option>' + 
-        state.orderedItemKeys.map(item => `<option value="${item}">${item}</option>`).join('');
-    document.getElementById('item-detail-table').innerHTML = '';
-    itemDropdown.dataset.keyName = keyName;
-    itemDropdown.dataset.valueColumns = JSON.stringify(valueColumns.map(c => c.customName || c.autoHeader));
-}
-
-function renderItemDetailView() {
-    const selectedItem = itemDropdown.value;
-    const container = document.getElementById('item-detail-table');
-    if (!selectedItem) return container.innerHTML = '';
-    const keyName = itemDropdown.dataset.keyName;
-    const valueColNames = JSON.parse(itemDropdown.dataset.valueColumns);
-    const headers = ['檔案名稱', ...valueColNames];
-    const data = state.allFileData.map(file => {
-        const row = file.data.find(r => r[keyName] === selectedItem);
-        const dataRow = { '檔案名稱': file.fileName };
-        valueColNames.forEach(colName => dataRow[colName] = row ? (row[colName] || 0) : 0);
-        return dataRow;
-    });
-    const summaryRow = state.summaryData.get(selectedItem);
-    if (summaryRow) {
-        const totalRow = { '檔案名稱': '<strong>📊 合計</strong>' };
-        valueColNames.forEach(colName => totalRow[colName] = summaryRow[colName] || 0);
-        data.unshift(totalRow);
-    }
-    container.innerHTML = `<h3 style="margin-bottom:20px; color:#667eea;">🔍 項目查詢：${selectedItem}</h3>` + generateHtmlTable(data, headers, true, 'total-row');
-}
-
-function setupTabs() {
-    document.querySelector('.view-tabs').addEventListener('click', e => {
-        if (e.target.classList.contains('tab-btn')) {
-            const targetView = e.target.dataset.view;
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === targetView));
-            document.querySelectorAll('.view-pane').forEach(pane => pane.classList.toggle('active', pane.id === targetView));
+            return data;
         }
-    });
-}
+        
+        function fillMergedCellsHorizontally(data, sheet, range) {
+            // 先處理 Excel 原生的合併儲存格
+            (sheet['!merges'] || []).forEach(merge => {
+                if (merge.s.c > range.e.c || merge.e.c < range.s.c || merge.s.r > range.e.r || merge.e.r < range.s.r) return;
+                const s = { r: merge.s.r - range.s.r, c: merge.s.c - range.s.c };
+                if (s.r < 0 || s.c < 0 || s.r >= data.length || !data[s.r]) return;
+                const val = data[s.r][s.c];
+                for (let r = s.r; r <= merge.e.r - range.s.r; r++) {
+                    if (r >= data.length) break;
+                    if (!data[r]) data[r] = [];
+                    for (let c = s.c; c <= merge.e.c - range.s.c; c++) data[r][c] = val;
+                }
+            });
+            
+            // 額外補完：對於每一列，將空白儲存格填入左邊最近的非空值（水平向右填充）
+            data.forEach((row, rowIdx) => {
+                if (!row) return;
+                let lastValue = null;
+                for (let c = 0; c < row.length; c++) {
+                    const cell = row[c];
+                    if (cell != null && String(cell).trim() !== '') {
+                        lastValue = cell;
+                    } else if (lastValue != null) {
+                        // 將空白儲存格填入前一個非空值
+                        row[c] = lastValue;
+                    }
+                }
+            });
+            
+            return data;
+        }
+              function loadHeadersAndMapping() {
+            const rangeStr = dataRangeInput.value.trim().toUpperCase();
+            const headerRowCount = parseInt(headerRowsInput.value, 10);
+            if (!rangeStr || isNaN(headerRowCount) || headerRowCount < 1) {
+                return alert('請輸入有效的範圍和標頭列數');
+            }
+            try {
+                const sheet = state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
+                const range = XLSX.utils.decode_range(rangeStr);
+                if (headerRowCount > (range.e.r - range.s.r + 1)) {
+                    return alert("標頭列數過大。");
+                }
+                const headerBlockRange = { s: range.s, e: { c: range.e.c, r: range.s.r + headerRowCount - 1 } };
+                let headerData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: headerBlockRange, defval: null });
+                headerData = unmergeAndFill(headerData, sheet, headerBlockRange);
+                const finalHeaders = Array.from({ length: range.e.c - range.s.c + 1 }, (_, c) => 
+                    Array.from({ length: headerRowCount }, (_, r) => headerData[r]?.[c] || '')
+                    .map(s => String(s).trim())
+                    .filter((v, i, a) => v && a.indexOf(v) === i)
+                    .join(' ')
+                );
+                
+                // 儲存原始資料供轉置使用
+                const dataRange = { s: { r: range.s.r + headerRowCount, c: range.s.c }, e: range.e };
+                let dataRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: dataRange, defval: null });
+                dataRows = unmergeAndFill(dataRows, sheet, dataRange);
+                state.originalData = { 
+                    headers: finalHeaders, 
+                    data: dataRows, 
+                    range: range, 
+                    headerRowCount: headerRowCount,
+                    sheet: sheet
+                };
+                
+                state.columnMappings = finalHeaders.map((header, i) => {
+                    const excelCol = XLSX.utils.encode_col(range.s.c + i);
+                    const autoRole = (i === 0) ? 'key' : (!header ? 'ignore' : 'value');
+                    return { 
+                        excelCol, 
+                        autoHeader: header || `(空白欄 ${excelCol})`, 
+                        customName: header || '', 
+                        role: autoRole, 
+                        include: autoRole !== 'ignore' 
+                    };
+                });
+                state.isTransposed = false;
+                transposeControls.style.display = 'none';
+                transposeBtn.textContent = '🔄 欄列轉置';
+                renderMappingTable();
+                document.getElementById('section-mapping').style.display = 'block';
+                updateStep(3, 'completed');
+            } catch(err) {
+                showDetectResult(`讀取欄位失敗：${err.message}`, 'error');
+                resetMappings();
+            }
+        }
+        
+        function renderMappingTable() {
+            let html = `<div class="mapping-table-wrapper"><table class="mapping-table">
+                <thead><tr>
+                    <th style="width:100px;">Excel 欄位</th>
+                    <th>原始標頭</th>
+                    <th>報表欄位名稱</th>
+                    <th style="width:150px;">欄位角色</th>
+                    <th style="width:80px;">使用</th>
+                </tr></thead><tbody>`;
+            
+            state.columnMappings.forEach((col, idx) => {
+                html += `
+                    <tr>
+                        <td><span class="excel-col">${col.excelCol}</span></td>
+                        <td>${col.autoHeader}</td>
+                        <td><input type="text" data-idx="${idx}" class="custom-name-input" value="${col.customName}"></td>
+                        <td>
+                            <select data-idx="${idx}" class="role-select">
+                                <option value="ignore" ${col.role === 'ignore' ? 'selected' : ''}>忽略</option>
+                                <option value="key" ${col.role === 'key' ? 'selected' : ''}>主鍵欄位</option>
+                                <option value="value" ${col.role === 'value' ? 'selected' : ''}>加總欄位</option>
+                            </select>
+                        </td>
+                        <td style="text-align:center;">
+                            <input type="checkbox" data-idx="${idx}" class="include-checkbox" ${col.include ? 'checked' : ''}>
+                        </td>
+                    </tr>`;
+            });
+            
+            mappingFields.innerHTML = html + `</tbody></table></div>`;
+            
+            mappingFields.querySelectorAll('.custom-name-input').forEach(i => 
+                i.addEventListener('input', e => state.columnMappings[e.target.dataset.idx].customName = e.target.value.trim())
+            );
+            mappingFields.querySelectorAll('.include-checkbox').forEach(c => 
+                c.addEventListener('change', e => state.columnMappings[e.target.dataset.idx].include = e.target.checked)
+            );
+            mappingFields.querySelectorAll('.role-select').forEach(s => 
+                s.addEventListener('change', e => {
+                    const idx = e.target.dataset.idx;
+                    const isIgnored = e.target.value === 'ignore';
+                    state.columnMappings[idx].role = e.target.value;
+                    state.columnMappings[idx].include = !isIgnored;
+                    mappingFields.querySelector(`.include-checkbox[data-idx="${idx}"]`).checked = !isIgnored;
+                })
+            );
+            processBtn.disabled = false;
+        }
+              function transposeData() {
+            if (!state.originalData) {
+                alert('請先讀取欄位資料');
+                return;
+            }
+            
+            if (state.isTransposed) {
+                // 還原到原始狀態
+                const { headers } = state.originalData;
+                state.columnMappings = headers.map((header, i) => {
+                    const excelCol = XLSX.utils.encode_col(state.originalData.range.s.c + i);
+                    const autoRole = (i === 0) ? 'key' : (!header ? 'ignore' : 'value');
+                    return { 
+                        excelCol, 
+                        autoHeader: header || `(空白欄 ${excelCol})`, 
+                        customName: header || '', 
+                        role: autoRole, 
+                        include: autoRole !== 'ignore' 
+                    };
+                });
+                state.isTransposed = false;
+                transposeControls.style.display = 'none';
+                transposeBtn.textContent = '🔄 欄列轉置';
+                renderMappingTable();
+            } else {
+                // 執行轉置前先補完標題列
+                const { headers, data, range, headerRowCount, sheet } = state.originalData;
+                
+                // 重新讀取標題區域，包含合併儲存格資訊
+                const headerBlockRange = { s: range.s, e: { c: range.e.c, r: range.s.r + headerRowCount - 1 } };
+                let headerData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: headerBlockRange, defval: null });
+                
+                // 補完合併儲存格（水平方向）
+                headerData = fillMergedCellsHorizontally(headerData, sheet, headerBlockRange);
+                
+                // 重新生成完整標題
+                const completeHeaders = Array.from({ length: range.e.c - range.s.c + 1 }, (_, c) => 
+                    Array.from({ length: headerRowCount }, (_, r) => headerData[r]?.[c] || '')
+                    .map(s => String(s).trim())
+                    .filter((v, i, a) => v && a.indexOf(v) === i)
+                    .join(' ')
+                );
+                
+                // 更新原始資料中的標題
+                state.originalData.headers = completeHeaders;
+                
+                // 建立下拉選單選項
+                transposeKeySelect.innerHTML = '<option value="">--- 請選擇主鍵欄位 ---</option>' + 
+                    completeHeaders.map((h, i) => `<option value="${i}">${h || `欄位 ${i+1}`}</option>`).join('');
+                
+                transposeControls.style.display = 'flex';
+                transposeBtn.textContent = '↩️ 還原欄列';
+                alert('✅ 標題列已補完！\n\n請選擇一個欄位作為轉置後的主鍵');
+            }
+        }
+        
+        function applyTranspose() {
+            const keyColIndex = parseInt(transposeKeySelect.value);
+            if (isNaN(keyColIndex)) return;
+            
+            const { headers, data } = state.originalData;
+            
+            // 過濾掉空白行
+            const validData = data.filter(row => !isRowEmpty(row));
+            
+            // 建立轉置後的資料
+            const transposedMappings = [];
+            
+            // 💡 修正點：使用 isFirstMapping 變數
+            let isFirstMapping = true;
 
-updateStep(1);
-setupTabs();
-</script>
+            headers.forEach((originalHeader, colIdx) => {
+                if (colIdx === keyColIndex) return; // 跳過主鍵欄位
+                
+                const rowName = originalHeader || `欄位 ${colIdx + 1}`;
+                
+                // 判斷當前的角色
+                let currentRole = 'value'; // 預設為 'value'
+                if (isFirstMapping) {
+                    currentRole = 'key'; // 轉置後的第一個欄位才是 'key'
+                    isFirstMapping = false; // 之後的欄位都是 'value'
+                }
+
+                transposedMappings.push({
+                    excelCol: XLSX.utils.encode_col(state.originalData.range.s.c + colIdx),
+                    autoHeader: rowName,
+                    customName: rowName,
+                    role: currentRole, // 💡 修正點：使用修正後的 role
+                    include: true,
+                    isTransposeHeader: true
+                });
+            });
+            
+            state.columnMappings = transposedMappings;
+            state.isTransposed = true;
+            state.transposeKeyIndex = keyColIndex;
+            
+            renderMappingTable();
+            alert(`✅ 轉置完成!\n新的主鍵欄位: ${headers[keyColIndex] || `欄位 ${keyColIndex + 1}`}\n共產生 ${validData.length} 個數值欄位`);
+        }
+        
+        // 💡 步驟 2：替換為包含驗證邏輯的 processData
+        function processData() {
+            const keyColumns = state.columnMappings.filter(c => c.role === 'key' && c.include);
+            const valueColumns = state.columnMappings.filter(c => c.role === 'value' && c.include);
+            if (keyColumns.length !== 1) return alert('⚠️ 必須選擇一個主鍵欄位！');
+            if (valueColumns.length === 0) return alert('⚠️ 請至少選擇一個加總欄位！');
+            
+            const keyCol = keyColumns[0];
+            const keyName = keyCol.customName || keyCol.autoHeader;
+            const rangeStr = dataRangeInput.value.trim();
+            if (!rangeStr) return alert('⚠️ 請輸入資料範圍！');
+            
+            // 💡 新增：用於存放被排除的檔案
+            const excludedFiles = [];
+            const templateHeaders = state.originalData.headers; // 基準標頭
+            const headerRowCount = parseInt(headerRowsInput.value, 10);
+            const warningContainer = document.getElementById('validation-warnings');
+            warningContainer.innerHTML = ''; // 每次處理時都先清空
+            
+            state.allFileData = [];
+            state.summaryData = new Map();
+            state.orderedItemKeys = [];
+            
+            try {
+                const range = XLSX.utils.decode_range(rangeStr);
+                const dataRange = { 
+                    s: { r: range.s.r + headerRowCount, c: range.s.c }, 
+                    e: range.e 
+                };
+                
+                state.workbooks.forEach(wb => {
+                    const sheet = wb.workbook.Sheets[wb.workbook.SheetNames[0]];
+                    
+                    // --- 💡 驗證邏輯開始 💡 ---
+                    let isIdentical = false;
+                    if (wb.file.name === state.workbooks[0].file.name) {
+                        // 第一個檔案 (基準檔案) 總是通過驗證
+                        isIdentical = true;
+                    } else if (sheet && sheet['!ref']) {
+                        // 檢查其他檔案是否符合基準
+                        try {
+                            // 1. 用相同的範圍和設定來讀取目前檔案的標頭
+                            const headerBlockRange = { s: range.s, e: { c: range.e.c, r: range.s.r + headerRowCount - 1 } };
+                            let currentHeaderData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: headerBlockRange, defval: null });
+                            currentHeaderData = unmergeAndFill(currentHeaderData, sheet, headerBlockRange);
+                            
+                            const currentFinalHeaders = Array.from({ length: range.e.c - range.s.c + 1 }, (_, c) => 
+                                Array.from({ length: headerRowCount }, (_, r) => currentHeaderData[r]?.[c] || '')
+                                .map(s => String(s).trim())
+                                .filter((v, i, a) => v && a.indexOf(v) === i)
+                                .join(' ')
+                            );
+                            
+                            // 2. 比對標頭
+                            if (currentFinalHeaders.length === templateHeaders.length && 
+                                currentFinalHeaders.every((h, i) => h === templateHeaders[i])) {
+                                isIdentical = true;
+                            }
+                        } catch (err) {
+                            console.error(`Error validating file ${wb.file.name}:`, err);
+                            isIdentical = false; // 發生錯誤，視為不符
+                        }
+                    }
+                    
+                    if (!isIdentical) {
+                        // 如果不相符，就略過此檔案，並記錄檔名
+                        if (wb.file.name !== state.workbooks[0].file.name) {
+                            excludedFiles.push(wb.file.name);
+                        }
+                        return; // 略過此檔案的後續處理
+                    }
+                    // --- 💡 驗證邏輯結束 💡 ---
+                    
+                    // --- 僅對通過驗證的檔案執行以下處理 ---
+                    if (!sheet || !sheet['!ref']) return; // 再次檢查 sheet 是否存在
+
+                    let dataRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: dataRange, defval: null });
+                    dataRows = unmergeAndFill(dataRows, sheet, dataRange);
+                    
+                    let transformedData;
+                    
+                    if (state.isTransposed) {
+                        // 轉置模式處理
+                        const { headers } = state.originalData;
+                        const keyColIndex = state.transposeKeyIndex;
+                        const validData = dataRows.filter(row => !isRowEmpty(row));
+                        
+                        // 為每個原始欄位建立一筆記錄
+                        transformedData = [];
+                        state.columnMappings.forEach(mapping => {
+                            const colIdx = XLSX.utils.decode_col(mapping.excelCol) - range.s.c;
+                            if (colIdx === keyColIndex) return; // 跳過主鍵欄位
+                            
+                            const dataRow = { [keyName]: mapping.customName || mapping.autoHeader };
+                            validData.forEach((row, rowIdx) => {
+                                const colHeader = String(row[keyColIndex] || '').trim();
+                                if (colHeader) {
+                                    dataRow[colHeader] = toNumber(row[colIdx]);
+                                }
+                            });
+                            transformedData.push(dataRow);
+                        });
+                    } else {
+                        // 正常模式處理
+                        const keyColIndex = XLSX.utils.decode_col(keyCol.excelCol) - range.s.c;
+                        transformedData = dataRows.map(row => {
+                            if (isRowEmpty(row)) return null;
+                            const keyValue = row[keyColIndex];
+                            if (keyValue == null || String(keyValue).trim() === '') return null;
+                            
+                            const dataRow = { [keyName]: String(keyValue).trim() };
+                            valueColumns.forEach(valCol => {
+                                const colIdx = XLSX.utils.decode_col(valCol.excelCol) - range.s.c;
+                                dataRow[valCol.customName || valCol.autoHeader] = toNumber(row[colIdx]);
+                            });
+                            return dataRow;
+                        }).filter(Boolean);
+                    }
+                    
+                    state.allFileData.push({ fileName: wb.file.name, data: transformedData });
+                });
+                
+                // 收集所有唯一的主鍵值，保持順序
+                const seenKeys = new Set();
+                state.allFileData.forEach(file => {
+                    file.data.forEach(row => {
+                        const key = row[keyName];
+                        if (!seenKeys.has(key)) {
+                            seenKeys.add(key);
+                            state.orderedItemKeys.push(key);
+                        }
+                    });
+                });
+                
+                // 取得所有數值欄位名稱
+                const allValueColumns = state.isTransposed 
+                    ? Object.keys(state.allFileData[0]?.data[0] || {}).filter(k => k !== keyName)
+                    : valueColumns.map(c => c.customName || c.autoHeader);
+                
+                // 彙總資料
+                state.allFileData.forEach(file => {
+                    file.data.forEach(row => {
+                        const key = row[keyName];
+                        let summaryRow = state.summaryData.get(key) || { 
+                            [keyName]: key, 
+                            ...Object.fromEntries(allValueColumns.map(c => [c, 0])) 
+                        };
+                        allValueColumns.forEach(c => {
+                            summaryRow[c] += row[c] || 0;
+                        });
+                        state.summaryData.set(key, summaryRow);
+                    });
+                });
+                
+                // --- 💡 處理完成後，顯示警告訊息 💡 ---
+                if (excludedFiles.length > 0) {
+                    warningContainer.innerHTML = `
+                        <div class="alert alert-warning">
+                            <strong>${excludedFiles.length} 個檔案未納入彙總</strong>
+                            <p style="margin-top:10px; font-size: 0.9em;">
+                                偵測到以下檔案的資料範圍或標頭結構與第一個檔案不符，已自動略過：
+                            </p>
+                            <ul style="padding-left: 20px; font-size: 0.9em;">
+                                ${excludedFiles.map(name => `<li>${name}</li>`).join('')}
+                            </ul>
+                        </div>`;
+                }
+                
+                renderSummaryView(keyName, allValueColumns);
+                renderFileQueryView(keyName, allValueColumns);
+                renderItemView(keyName, allValueColumns);
+                outputArea.style.display = 'block';
+                updateStep(4, 'completed');
+                outputArea.scrollIntoView({ behavior: 'smooth' });
+                
+                // 💡 更新完成提示
+                const processedFileCount = state.workbooks.length - excludedFiles.length;
+                alert(`✅ 處理完成！\n\n共 ${processedFileCount} 個檔案成功納入彙總\n${excludedFiles.length} 個檔案因結構不符被略過\n彙總了 ${state.summaryData.size} 個項目`);
+            
+            } catch(err) {
+                alert(`❌ 處理資料錯誤：${err.message}`);
+                console.error(err);
+            }
+        }
+
+        
+        function toNumber(val) {
+            if (val == null || val === '') return 0;
+            if (typeof val === 'number') return val;
+            return parseFloat(String(val).replace(/,/g, '')) || 0;
+        }
+              function generateHtmlTable(data, headers, formatNumbers = false, firstRowClass = '') {
+            let html = '<table class="report-table"><thead><tr>' + 
+                headers.map(h => `<th>${h}</th>`).join('') + 
+                '</tr></thead><tbody>';
+            
+            data.forEach((row, index) => {
+                const rowClass = (index === 0 && firstRowClass) ? ` class="${firstRowClass}"` : '';
+                html += `<tr${rowClass}>` + headers.map(h => {
+                    const val = row[h];
+                    if (formatNumbers && h !== '檔案名稱' && typeof val === 'number') {
+                        return `<td class="number">${val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>`;
+                    }
+                    return `<td>${val ?? ''}</td>`;
+                }).join('') + '</tr>';
+            });
+            
+            return html + '</tbody></table>';
+        }
+        
+        function renderSummaryView(keyName, valueColumns) {
+            const valueColNames = Array.isArray(valueColumns) ? valueColumns : valueColumns.map(c => c.customName || c.autoHeader);
+            const headers = [keyName, ...valueColNames];
+            const data = Array.from(state.summaryData.values());
+            document.getElementById('summary-view').innerHTML = 
+                `<h3 style="margin-bottom:20px; color:#667eea;">📊 所有檔案加總結果 (共 ${data.length} 項)</h3>` + 
+                generateHtmlTable(data, headers, true);
+        }
+        
+        function renderFileQueryView(keyName, valueColumns) {
+            const valueColNames = Array.isArray(valueColumns) ? valueColumns : valueColumns.map(c => c.customName || c.autoHeader);
+            fileDropdown.innerHTML = '<option value="">--- 請選擇要查詢的檔案 ---</option>' + 
+                state.workbooks.map(wb => `<option value="${wb.file.name}">${wb.file.name}</option>`).join('');
+            fileDetailTable.innerHTML = '';
+            fileDropdown.dataset.keyName = keyName;
+            fileDropdown.dataset.valueColumns = JSON.stringify(valueColNames);
+        }
+        
+        function renderFileDetailView() {
+            const selectedFilename = fileDropdown.value;
+            const container = fileDetailTable;
+            if (!selectedFilename) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            const keyName = fileDropdown.dataset.keyName;
+            const valueColNames = JSON.parse(fileDropdown.dataset.valueColumns);
+            const headers = [keyName, ...valueColNames];
+            const fileData = state.allFileData.find(file => file.fileName === selectedFilename);
+            
+            if (!fileData) {
+                // 💡 如果檔案被排除了，顯示這個訊息
+                container.innerHTML = `<div class="empty-state" style="color:#664d03;">此檔案可能因結構不符，未被納入彙總。<br/>(在 "加總總表" 頁籤頂端可查看詳情)</div>`;
+                return;
+            }
+            
+            container.innerHTML = 
+                `<h3 style="margin-bottom:20px; color:#667eea;">📁 ${selectedFilename} (共 ${fileData.data.length} 項)</h3>` + 
+                generateHtmlTable(fileData.data, headers, true);
+        }
+        
+        function renderItemView(keyName, valueColumns) {
+            const valueColNames = Array.isArray(valueColumns) ? valueColumns : valueColumns.map(c => c.customName || c.autoHeader);
+            itemDropdown.innerHTML = '<option value="">--- 請選擇要查詢的項目 ---</option>' + 
+                state.orderedItemKeys.map(item => `<option value="${item}">${item}</option>`).join('');
+            document.getElementById('item-detail-table').innerHTML = '';
+            itemDropdown.dataset.keyName = keyName;
+            itemDropdown.dataset.valueColumns = JSON.stringify(valueColNames);
+        }
+        
+        function renderItemDetailView() {
+            const selectedItem = itemDropdown.value;
+            const container = document.getElementById('item-detail-table');
+            if (!selectedItem) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            const keyName = itemDropdown.dataset.keyName;
+            const valueColNames = JSON.parse(itemDropdown.dataset.valueColumns);
+            const headers = ['檔案名稱', ...valueColNames];
+            
+            // 💡 只顯示被成功處理的檔案
+            const data = state.allFileData.map(file => {
+                const row = file.data.find(r => r[keyName] === selectedItem);
+                const dataRow = { '檔案名稱': file.fileName };
+                valueColNames.forEach(colName => {
+                    dataRow[colName] = row ? (row[colName] || 0) : 0;
+                });
+                return dataRow;
+            });
+            
+            const summaryRow = state.summaryData.get(selectedItem);
+            if (summaryRow) {
+                const totalRow = { '檔案名稱': '<strong>📊 合計</strong>' };
+                valueColNames.forEach(colName => {
+                    totalRow[colName] = summaryRow[colName] || 0;
+                });
+                data.unshift(totalRow);
+            }
+            
+            container.innerHTML = 
+                `<h3 style="margin-bottom:20px; color:#667eea;">🔍 項目查詢：${selectedItem}</h3>` + 
+                generateHtmlTable(data, headers, true, 'total-row');
+        }
+        
+        function setupTabs() {
+            document.querySelector('.view-tabs').addEventListener('click', e => {
+                if (e.target.classList.contains('tab-btn')) {
+                    const targetView = e.target.dataset.view;
+                    document.querySelectorAll('.tab-btn').forEach(btn => 
+                        btn.classList.toggle('active', btn.dataset.view === targetView)
+                    );
+                    document.querySelectorAll('.view-pane').forEach(pane => 
+                        pane.classList.toggle('active', pane.id === targetView)
+                    );
+                }
+            });
+        }
+        
+        updateStep(1);
+        setupTabs();
+    </script>
 </body>
 </html>
