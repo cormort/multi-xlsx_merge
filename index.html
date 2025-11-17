@@ -1,9 +1,9 @@
-V<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v13.6)</title>
+    <title>基金資料彙總報告產生器 (v13.8)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -189,8 +189,9 @@ V<!DOCTYPE html>
         .file-item span { flex: 1; color: #555; font-size: 0.9em; }
         
         #preview-area { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; max-height: 450px; overflow: auto; }
+        
         #preview-area table {
-             /* <-- width: 100%; */
+            /* 移除了 width: 100%; 讓表格可以水平延伸 */
             border-collapse: collapse;
             background: white;
             font-size: 0.85em;
@@ -243,23 +244,50 @@ V<!DOCTYPE html>
         .alert { padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
         .alert-info { background: #d1ecf1; border-left: 4px solid #17a2b8; color: #0c5460; }
         .alert-success { background: #d4edda; border-left: 4px solid #28a745; color: #155724; }
-        /* 💡 新增 .alert-warning 樣式 */
         .alert-warning { background: #fff3cd; border-left: 4px solid #ffc107; color: #664d03; }
         
         .alert::before { content: 'ℹ️'; font-size: 1.5em; }
         .alert-success::before { content: '✅'; }
-        .alert-warning::before { content: '⚠️'; } /* 💡 新增 .alert-warning 樣式 */
+        .alert-warning::before { content: '⚠️'; }
         
         .empty-state { text-align: center; padding: 60px 20px; color: #999; }
         .empty-state::before { content: '📊'; font-size: 4em; display: block; margin-bottom: 15px; opacity: 0.5; }
         
         .query-select { width: 100%; max-width: 500px; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1.1em; margin-bottom: 20px; background: white; cursor: pointer; }
         
+        .export-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #667eea;
+            color: #667eea;
+            box-shadow: none;
+            padding: 8px 16px; /* 讓按鈕小一點 */
+        }
+
+        .btn-outline:hover:not(:disabled) {
+            background: #f8f9ff;
+            color: #5568d3;
+            border-color: #5568d3;
+            transform: none;
+            box-shadow: none;
+        }
+
         @media (max-width: 768px) {
             .app-content { padding: 20px; }
             .progress-steps { flex-wrap: wrap; }
             .step { flex-basis: 50%; margin-bottom: 20px; }
             .form-row { flex-direction: column; }
+            
+            /* 讓匯出按鈕在小螢幕換行 */
+            .export-controls {
+                flex-wrap: wrap;
+                width: 100%;
+                margin-top: 15px;
+            }
         }
     </style>
 </head>
@@ -268,7 +296,7 @@ V<!DOCTYPE html>
     <div id="app-container">
         <div class="app-header">
             <h1>📊 基金資料彙總報告產生器</h1>
-            <div class="version">v13.6 - 結構驗證</div>
+            <div class="version">v13.8 - 清除標頭空白</div>
         </div>
         
         <div class="progress-steps">
@@ -330,9 +358,20 @@ V<!DOCTYPE html>
             </div>
             
             <div class="output-section" id="output-area">
+                
                 <div id="validation-warnings" style="margin-bottom: 20px;"></div>
                 
-                <h2 class="section-title">彙總報告結果</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 20px;">
+                    <h2 class="section-title" style="margin-bottom: 0;">彙總報告結果</h2>
+                    
+                    <div class="export-controls">
+                        <button class="btn btn-outline" id="export-json-btn" data-icon="💾">JSON</button>
+                        <button class="btn btn-outline" id="export-csv-btn" data-icon="💾">CSV</button>
+                        <button class="btn btn-outline" id="export-html-btn" data-icon="💾">HTML</button>
+                        <button class="btn btn-outline" id="export-xlsx-btn" data-icon="💾">XLSX</button>
+                    </div>
+                </div>
+
                 <div class="view-tabs">
                     <button class="tab-btn active" data-view="summary-view">📊 加總總表</button>
                     <button class="tab-btn" data-view="file-query-view">📁 檔案查詢</button>
@@ -361,7 +400,9 @@ V<!DOCTYPE html>
             orderedItemKeys: [], 
             isTransposed: false, 
             originalData: null, 
-            transposeKeyIndex: null 
+            transposeKeyIndex: null,
+            exportKeyName: null,
+            exportValueColumns: []
         };
         
         const dropArea = document.getElementById('drop-area');
@@ -609,7 +650,9 @@ V<!DOCTYPE html>
             
             return data;
         }
-              function loadHeadersAndMapping() {
+
+        // 💡 v13.8 修正：移除所有空白
+        function loadHeadersAndMapping() {
             const rangeStr = dataRangeInput.value.trim().toUpperCase();
             const headerRowCount = parseInt(headerRowsInput.value, 10);
             if (!rangeStr || isNaN(headerRowCount) || headerRowCount < 1) {
@@ -716,14 +759,16 @@ V<!DOCTYPE html>
             );
             processBtn.disabled = false;
         }
-              function transposeData() {
+
+        // 💡 v13.8 修正：移除所有空白
+        function transposeData() {
             if (!state.originalData) {
                 alert('請先讀取欄位資料');
                 return;
             }
             
             if (state.isTransposed) {
-                // 還原到原始狀態 (這部分不需要變更，因為它只是還原)
+                // 還原到原始狀態
                 const { headers } = state.originalData;
                 state.columnMappings = headers.map((header, i) => {
                     const excelCol = XLSX.utils.encode_col(state.originalData.range.s.c + i);
@@ -784,7 +829,6 @@ V<!DOCTYPE html>
             // 建立轉置後的資料
             const transposedMappings = [];
             
-            // 💡 修正點：使用 isFirstMapping 變數
             let isFirstMapping = true;
 
             headers.forEach((originalHeader, colIdx) => {
@@ -792,18 +836,17 @@ V<!DOCTYPE html>
                 
                 const rowName = originalHeader || `欄位 ${colIdx + 1}`;
                 
-                // 判斷當前的角色
-                let currentRole = 'value'; // 預設為 'value'
+                let currentRole = 'value'; 
                 if (isFirstMapping) {
-                    currentRole = 'key'; // 轉置後的第一個欄位才是 'key'
-                    isFirstMapping = false; // 之後的欄位都是 'value'
+                    currentRole = 'key'; 
+                    isFirstMapping = false; 
                 }
 
                 transposedMappings.push({
                     excelCol: XLSX.utils.encode_col(state.originalData.range.s.c + colIdx),
                     autoHeader: rowName,
                     customName: rowName,
-                    role: currentRole, // 💡 修正點：使用修正後的 role
+                    role: currentRole, 
                     include: true,
                     isTransposeHeader: true
                 });
@@ -817,7 +860,7 @@ V<!DOCTYPE html>
             alert(`✅ 轉置完成!\n新的主鍵欄位: ${headers[keyColIndex] || `欄位 ${keyColIndex + 1}`}\n共產生 ${validData.length} 個數值欄位`);
         }
         
-        // 💡 步驟 2：替換為包含驗證邏輯的 processData
+        // 💡 v13.8 修正：移除所有空白
         function processData() {
             const keyColumns = state.columnMappings.filter(c => c.role === 'key' && c.include);
             const valueColumns = state.columnMappings.filter(c => c.role === 'value' && c.include);
@@ -1027,7 +1070,7 @@ V<!DOCTYPE html>
         function renderSummaryView(keyName, valueColumns) {
             const valueColNames = Array.isArray(valueColumns) ? valueColumns : valueColumns.map(c => c.customName || c.autoHeader);
             const headers = [keyName, ...valueColNames];
-            const data = Array.from(state.summaryData.values());
+            const data = state.orderedItemKeys.map(key => state.summaryData.get(key)); // 依序顯示
             document.getElementById('summary-view').innerHTML = 
                 `<h3 style="margin-bottom:20px; color:#667eea;">📊 所有檔案加總結果 (共 ${data.length} 項)</h3>` + 
                 generateHtmlTable(data, headers, true);
@@ -1127,6 +1170,164 @@ V<!DOCTYPE html>
         
         updateStep(1);
         setupTabs();
+
+        document.getElementById('export-json-btn').addEventListener('click', exportDataAsJSON);
+        document.getElementById('export-csv-btn').addEventListener('click', exportDataAsCSV);
+        document.getElementById('export-html-btn').addEventListener('click', exportDataAsHTML);
+        document.getElementById('export-xlsx-btn').addEventListener('click', exportDataAsXLSX);
+
+        /**
+         * 匯出輔助函數：取得格式化後的彙總資料
+         */
+        function getSummaryDataForExport() {
+            // 檢查 state 是否有資料
+            if (!state.exportKeyName || !state.summaryData.size) {
+                alert("目前沒有彙總資料可供匯出。");
+                return null;
+            }
+            const headers = [state.exportKeyName, ...state.exportValueColumns];
+            // 依據 state.orderedItemKeys 的順序重新排序 data
+            const data = state.orderedItemKeys
+                .map(key => state.summaryData.get(key))
+                .filter(Boolean); // 過濾掉可能的 undefined
+            return { data, headers };
+        }
+
+        /**
+         * 匯出輔助函數：觸發下載
+         */
+        function triggerDownload(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        /**
+         * 匯出輔助函數：將文字安全轉換為 CSV 欄位 (處理引號和逗號)
+         */
+        function quoteCSV(val) {
+            if (val == null) return '';
+            let str = String(val);
+            // 如果包含引號、逗號或換行符，則需要加上引號
+            if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+                str = '"' + str.replace(/"/g, '""') + '"';
+            }
+            return str;
+        }
+
+        /**
+         * 匯出為 JSON
+         */
+        function exportDataAsJSON() {
+            const exportData = getSummaryDataForExport();
+            if (!exportData) return; // 如果沒有資料，就中止
+
+            const { data } = exportData;
+            const jsonString = JSON.stringify(data, null, 2); // null, 2 是為了美觀的格式化
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            triggerDownload(blob, '彙總報告.json');
+        }
+
+        /**
+         * 匯出為 CSV
+         */
+        function exportDataAsCSV() {
+            const exportData = getSummaryDataForExport();
+            if (!exportData) return;
+
+            const { data, headers } = exportData;
+            
+            let csvContent = headers.map(quoteCSV).join(',') + '\n';
+            
+            data.forEach(row => {
+                const rowValues = headers.map(header => quoteCSV(row[header]));
+                csvContent += rowValues.join(',') + '\n';
+            });
+
+            // 💡 加入 BOM (Byte Order Mark) 確保 Excel 正確辨識 UTF-8
+            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+            triggerDownload(blob, '彙總報告.csv');
+        }
+
+        /**
+         * 匯出為 HTML
+         */
+        function exportDataAsHTML() {
+            const exportData = getSummaryDataForExport();
+            if (!exportData) return;
+
+            const { data, headers } = exportData;
+            
+            // 重新使用 generateHtmlTable 函數，但傳入不同的 class
+            let tableHtml = '<table class="export-table"><thead><tr>' + 
+                headers.map(h => `<th>${h}</th>`).join('') + 
+                '</tr></thead><tbody>';
+            
+            data.forEach((row, index) => {
+                tableHtml += `<tr>` + headers.map(h => {
+                    const val = row[h];
+                    if (typeof val === 'number') {
+                        return `<td class="number">${val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>`;
+                    }
+                    return `<td>${val ?? ''}</td>`;
+                }).join('') + '</tr>';
+            });
+            tableHtml += '</tbody></table>';
+            
+            const fullHtml = `
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>彙總報告</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        .export-table { border-collapse: collapse; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .export-table th, .export-table td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }
+        .export-table thead { background: #667eea; color: white; }
+        .export-table tbody tr:nth-child(even) { background: #f8f9fa; }
+        .export-table tbody tr:hover { background: #f0f2ff; }
+        .export-table .number { text-align: right; font-family: 'Courier New', monospace; color: #667eea; }
+    </style>
+</head>
+<body>
+    <h1>彙總報告</h1>
+    ${tableHtml}
+</body>
+</html>
+            `;
+            const blob = new Blob([fullHtml], { type: 'text/html' });
+            triggerDownload(blob, '彙總報告.html');
+        }
+
+        /**
+         * 匯出為 XLSX
+         */
+        function exportDataAsXLSX() {
+            const exportData = getSummaryDataForExport();
+            if (!exportData) return;
+
+            const { data, headers } = exportData;
+            
+            // 1. 建立一個新的工作簿
+            const wb = XLSX.utils.book_new();
+            
+            // 2. 將 JSON 資料轉換為工作表 (並指定欄位順序)
+            const ws = XLSX.utils.json_to_sheet(data, { header: headers });
+            
+            // 3. 將工作表加入工作簿
+            XLSX.utils.book_append_sheet(wb, ws, '彙總總表');
+            
+            // 4. 觸發下載
+            XLSX.writeFile(wb, '彙總報告.xlsx');
+        }
+
     </script>
 </body>
 </html>
