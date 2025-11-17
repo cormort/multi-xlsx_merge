@@ -624,11 +624,13 @@ V<!DOCTYPE html>
                 const headerBlockRange = { s: range.s, e: { c: range.e.c, r: range.s.r + headerRowCount - 1 } };
                 let headerData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: headerBlockRange, defval: null });
                 headerData = unmergeAndFill(headerData, sheet, headerBlockRange);
+                
+                // 💡 修正點：移除所有空白
                 const finalHeaders = Array.from({ length: range.e.c - range.s.c + 1 }, (_, c) => 
                     Array.from({ length: headerRowCount }, (_, r) => headerData[r]?.[c] || '')
-                    .map(s => String(s).trim())
+                    .map(s => String(s).replace(/\s+/g, '')) // 移除所有空白
                     .filter((v, i, a) => v && a.indexOf(v) === i)
-                    .join(' ')
+                    .join('') // 不使用空白組合
                 );
                 
                 // 儲存原始資料供轉置使用
@@ -721,7 +723,7 @@ V<!DOCTYPE html>
             }
             
             if (state.isTransposed) {
-                // 還原到原始狀態
+                // 還原到原始狀態 (這部分不需要變更，因為它只是還原)
                 const { headers } = state.originalData;
                 state.columnMappings = headers.map((header, i) => {
                     const excelCol = XLSX.utils.encode_col(state.originalData.range.s.c + i);
@@ -749,12 +751,12 @@ V<!DOCTYPE html>
                 // 補完合併儲存格（水平方向）
                 headerData = fillMergedCellsHorizontally(headerData, sheet, headerBlockRange);
                 
-                // 重新生成完整標題
+                // 💡 修正點：移除所有空白
                 const completeHeaders = Array.from({ length: range.e.c - range.s.c + 1 }, (_, c) => 
                     Array.from({ length: headerRowCount }, (_, r) => headerData[r]?.[c] || '')
-                    .map(s => String(s).trim())
+                    .map(s => String(s).replace(/\s+/g, '')) // 移除所有空白
                     .filter((v, i, a) => v && a.indexOf(v) === i)
-                    .join(' ')
+                    .join('') // 不使用空白組合
                 );
                 
                 // 更新原始資料中的標題
@@ -827,12 +829,11 @@ V<!DOCTYPE html>
             const rangeStr = dataRangeInput.value.trim();
             if (!rangeStr) return alert('⚠️ 請輸入資料範圍！');
             
-            // 💡 新增：用於存放被排除的檔案
             const excludedFiles = [];
-            const templateHeaders = state.originalData.headers; // 基準標頭
+            const templateHeaders = state.originalData.headers; // 基準標頭 (已去除空白)
             const headerRowCount = parseInt(headerRowsInput.value, 10);
             const warningContainer = document.getElementById('validation-warnings');
-            warningContainer.innerHTML = ''; // 每次處理時都先清空
+            warningContainer.innerHTML = ''; 
             
             state.allFileData = [];
             state.summaryData = new Map();
@@ -848,24 +849,22 @@ V<!DOCTYPE html>
                 state.workbooks.forEach(wb => {
                     const sheet = wb.workbook.Sheets[wb.workbook.SheetNames[0]];
                     
-                    // --- 💡 驗證邏輯開始 💡 ---
+                    // --- 驗證邏輯開始 ---
                     let isIdentical = false;
                     if (wb.file.name === state.workbooks[0].file.name) {
-                        // 第一個檔案 (基準檔案) 總是通過驗證
                         isIdentical = true;
                     } else if (sheet && sheet['!ref']) {
-                        // 檢查其他檔案是否符合基準
                         try {
-                            // 1. 用相同的範圍和設定來讀取目前檔案的標頭
                             const headerBlockRange = { s: range.s, e: { c: range.e.c, r: range.s.r + headerRowCount - 1 } };
                             let currentHeaderData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: headerBlockRange, defval: null });
                             currentHeaderData = unmergeAndFill(currentHeaderData, sheet, headerBlockRange);
                             
+                            // 💡 修正點：移除所有空白
                             const currentFinalHeaders = Array.from({ length: range.e.c - range.s.c + 1 }, (_, c) => 
                                 Array.from({ length: headerRowCount }, (_, r) => currentHeaderData[r]?.[c] || '')
-                                .map(s => String(s).trim())
+                                .map(s => String(s).replace(/\s+/g, '')) // 移除所有空白
                                 .filter((v, i, a) => v && a.indexOf(v) === i)
-                                .join(' ')
+                                .join('') // 不使用空白組合
                             );
                             
                             // 2. 比對標頭
@@ -875,21 +874,19 @@ V<!DOCTYPE html>
                             }
                         } catch (err) {
                             console.error(`Error validating file ${wb.file.name}:`, err);
-                            isIdentical = false; // 發生錯誤，視為不符
+                            isIdentical = false; 
                         }
                     }
                     
                     if (!isIdentical) {
-                        // 如果不相符，就略過此檔案，並記錄檔名
                         if (wb.file.name !== state.workbooks[0].file.name) {
                             excludedFiles.push(wb.file.name);
                         }
-                        return; // 略過此檔案的後續處理
+                        return; 
                     }
-                    // --- 💡 驗證邏輯結束 💡 ---
+                    // --- 驗證邏輯結束 ---
                     
-                    // --- 僅對通過驗證的檔案執行以下處理 ---
-                    if (!sheet || !sheet['!ref']) return; // 再次檢查 sheet 是否存在
+                    if (!sheet || !sheet['!ref']) return; 
 
                     let dataRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: dataRange, defval: null });
                     dataRows = unmergeAndFill(dataRows, sheet, dataRange);
@@ -902,15 +899,15 @@ V<!DOCTYPE html>
                         const keyColIndex = state.transposeKeyIndex;
                         const validData = dataRows.filter(row => !isRowEmpty(row));
                         
-                        // 為每個原始欄位建立一筆記錄
                         transformedData = [];
                         state.columnMappings.forEach(mapping => {
                             const colIdx = XLSX.utils.decode_col(mapping.excelCol) - range.s.c;
-                            if (colIdx === keyColIndex) return; // 跳過主鍵欄位
+                            if (colIdx === keyColIndex) return; 
                             
                             const dataRow = { [keyName]: mapping.customName || mapping.autoHeader };
                             validData.forEach((row, rowIdx) => {
-                                const colHeader = String(row[keyColIndex] || '').trim();
+                                // 💡 轉置模式的 "新標頭" 也應移除空白
+                                const colHeader = String(row[keyColIndex] || '').replace(/\s+/g, '');
                                 if (colHeader) {
                                     dataRow[colHeader] = toNumber(row[colIdx]);
                                 }
@@ -925,7 +922,8 @@ V<!DOCTYPE html>
                             const keyValue = row[keyColIndex];
                             if (keyValue == null || String(keyValue).trim() === '') return null;
                             
-                            const dataRow = { [keyName]: String(keyValue).trim() };
+                            // 💡 主鍵值也應移除所有空白
+                            const dataRow = { [keyName]: String(keyValue).replace(/\s+/g, '') };
                             valueColumns.forEach(valCol => {
                                 const colIdx = XLSX.utils.decode_col(valCol.excelCol) - range.s.c;
                                 dataRow[valCol.customName || valCol.autoHeader] = toNumber(row[colIdx]);
@@ -968,8 +966,10 @@ V<!DOCTYPE html>
                         state.summaryData.set(key, summaryRow);
                     });
                 });
+
+                state.exportKeyName = keyName;
+                state.exportValueColumns = allValueColumns;
                 
-                // --- 💡 處理完成後，顯示警告訊息 💡 ---
                 if (excludedFiles.length > 0) {
                     warningContainer.innerHTML = `
                         <div class="alert alert-warning">
@@ -990,7 +990,6 @@ V<!DOCTYPE html>
                 updateStep(4, 'completed');
                 outputArea.scrollIntoView({ behavior: 'smooth' });
                 
-                // 💡 更新完成提示
                 const processedFileCount = state.workbooks.length - excludedFiles.length;
                 alert(`✅ 處理完成！\n\n共 ${processedFileCount} 個檔案成功納入彙總\n${excludedFiles.length} 個檔案因結構不符被略過\n彙總了 ${state.summaryData.size} 個項目`);
             
