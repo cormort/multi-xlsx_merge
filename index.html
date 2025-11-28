@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v14.0)</title>
+    <title>基金資料彙總報告產生器 (v14.1)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -275,7 +275,6 @@
             box-shadow: none;
         }
         
-        /* New Style for Source Name Highlight */
         .source-badge {
             display: inline-block;
             background: #e2e8f0;
@@ -301,7 +300,7 @@
     <div id="app-container">
         <div class="app-header">
             <h1>📊 基金資料彙總報告產生器</h1>
-            <div class="version">v14.0 - 新增基金名稱來源設定</div>
+            <div class="version">v14.1 - 來源名稱自動去除空白</div>
         </div>
         
         <div class="progress-steps">
@@ -343,7 +342,7 @@
                         <input type="number" id="header-rows-input" value="1" min="1">
                     </div>
                 </div>
-                <!-- 新增：來源名稱設定 -->
+                
                 <div class="form-row" style="background: #f1f3f9; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0;">
                     <div class="form-group">
                         <label class="form-label">🏷️ 基金/來源名稱抓取方式</label>
@@ -355,7 +354,7 @@
                     <div class="form-group" id="source-cell-group" style="display:none;">
                         <label class="form-label">來源名稱儲存格座標</label>
                         <input type="text" id="source-name-cell" placeholder="例如: B2, C3...">
-                        <small style="color:#666;">系統將抓取每個檔案中此格的內容作為來源名稱</small>
+                        <small style="color:#666;">系統將抓取內容並<strong>自動移除所有空白</strong>以節省空間</small>
                     </div>
                 </div>
 
@@ -934,11 +933,12 @@
                     }
                     if (!sheet || !sheet['!ref']) return; 
 
-                    // --- 抓取來源名稱 (v14.0 Feature) ---
+                    // --- 抓取來源名稱 (v14.1 Feature) ---
                     let sourceDisplayName = wb.file.name;
                     if (useCellForSource && sheet[sourceCellAddress]) {
                         const cellVal = sheet[sourceCellAddress].v;
-                        if(cellVal) sourceDisplayName = String(cellVal).trim();
+                        // 改為 replace(/\s+/g, '') 以移除所有空白
+                        if(cellVal) sourceDisplayName = String(cellVal).replace(/\s+/g, ''); 
                     }
 
                     let dataRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: dataRange, defval: null });
@@ -1080,7 +1080,6 @@
         
         function renderFileQueryView(keyName, valueColumns) {
             const valueColNames = Array.isArray(valueColumns) ? valueColumns : valueColumns.map(c => c.customName || c.autoHeader);
-            // v14.0: Show Source Name in Dropdown
             fileDropdown.innerHTML = '<option value="">--- 請選擇要查詢的檔案 ---</option>' + 
                 state.allFileData.map(f => {
                     const label = f.sourceName === f.fileName ? f.fileName : `${f.sourceName} (${f.fileName})`;
@@ -1136,14 +1135,12 @@
             
             const keyName = itemDropdown.dataset.keyName;
             const valueColNames = JSON.parse(itemDropdown.dataset.valueColumns);
-            // v14.0: Change Header to indicate source name
             const colHeaderName = '來源/檔案名稱';
             const headers = [colHeaderName, ...valueColNames];
             
             const data = state.allFileData.map(file => {
                 const row = file.data.find(r => r[keyName] === selectedItem);
                 
-                // v14.0: Fancy display for the source column
                 let displayHtml = file.sourceName;
                 if (file.sourceName !== file.fileName) {
                      displayHtml = `<span title="檔案: ${file.fileName}">${file.sourceName}</span>`;
