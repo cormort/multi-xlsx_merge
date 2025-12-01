@@ -38,8 +38,8 @@ let fundDetailsMap = {
 let TEMPLATE_CONFIG = {
     'op_income': { 
         name: '作業基金 - 收支餘絀表',
-        range: 'A6:I38', 
-        headerRows: 1, 
+        range: 'A4:I38', 
+        headerRows: 2, 
         keyName: '科目', 
         sortType: 'op_income',
         sourceMode: 'cell', 
@@ -48,8 +48,8 @@ let TEMPLATE_CONFIG = {
     },
     'special_cash': { 
         name: '特別收入基金 - 現金流量表',
-        range: 'A6:E48', 
-        headerRows: 1, 
+        range: 'A4:E48', 
+        headerRows: 2, 
         keyName: '項目', 
         sortType: 'special_cash',
         sourceMode: 'cell', 
@@ -58,8 +58,8 @@ let TEMPLATE_CONFIG = {
     },
     'op_cash': { 
         name: '作業基金 - 現金流量表',
-        range: 'A6:E55', 
-        headerRows: 1, 
+        range: 'A4:E49', 
+        headerRows: 2, 
         keyName: '科目', 
         sortType: 'op_cash',
         sourceMode: 'cell', 
@@ -68,8 +68,8 @@ let TEMPLATE_CONFIG = {
     },
     'op_surplus': { 
         name: '作業基金 - 餘絀撥補表',
-        range: 'A6:G29', 
-        headerRows: 1, 
+        range: 'A4:G29', 
+        headerRows: 2, 
         keyName: '科目', 
         sortType: 'op_surplus',
         sourceMode: 'cell', 
