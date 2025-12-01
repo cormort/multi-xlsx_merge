@@ -134,7 +134,6 @@ function init() {
 // 填充版型下拉選單
 function populateTemplateDropdown() {
     const select = els.templateSelect;
-    // 保留第一個 custom 選項，移除其他
     while (select.options.length > 1) select.remove(1);
     
     for (const [key, config] of Object.entries(TEMPLATE_CONFIG)) {
@@ -171,18 +170,15 @@ function setupEventListeners() {
     els.transposeKeySelect.addEventListener('change', applyTranspose);
     els.sourceNameMode.addEventListener('change', (e) => els.sourceCellGroup.style.display = e.target.value === 'cell' ? 'block' : 'none');
     
-    // 版面匯入匯出
     els.exportTemplateBtn.addEventListener('click', exportTemplates);
     els.importTemplateBtn.addEventListener('click', () => els.templateFileInput.click());
     els.templateFileInput.addEventListener('change', importTemplates);
 
-    // 匯出報表
     document.getElementById('export-json-btn').addEventListener('click', () => exportReport('json'));
     document.getElementById('export-csv-btn').addEventListener('click', () => exportReport('csv'));
     document.getElementById('export-html-btn').addEventListener('click', () => exportReport('html'));
     document.getElementById('export-xlsx-btn').addEventListener('click', () => exportReport('xlsx'));
     
-    // Tab 切換
     document.querySelector('.view-tabs').addEventListener('click', e => {
         if (e.target.classList.contains('tab-btn')) {
             const target = e.target.dataset.view;
@@ -216,10 +212,8 @@ function importTemplates(e) {
             if (data.orderLists) ORDER_LISTS = { ...ORDER_LISTS, ...data.orderLists };
             if (data.fundDetails) fundDetailsMap = { ...fundDetailsMap, ...data.fundDetails };
             
-            populateTemplateDropdown(); // 重新整理選單
+            populateTemplateDropdown(); 
             alert(`✅ 設定匯入成功！已更新版型、排序清單與基金資料庫。`);
-            
-            // 重置 input 以便重複匯入同檔名
             els.templateFileInput.value = ''; 
         } catch (err) {
             alert(`❌ 匯入失敗：格式錯誤 (${err.message})`);
@@ -279,7 +273,6 @@ async function handleFiles(fileList) {
         els.clearBtn.style.display = 'inline-flex';
         updateStep(2);
         
-        // 如果目前選單不是自訂，嘗試自動套用
         if (els.templateSelect.value !== 'custom') handleTemplateChange();
     } catch(err) {
         els.previewArea.innerHTML = `<div class="empty-state" style="color:#dc3545;">檔案解析失敗：${err.message}</div>`;
@@ -311,19 +304,14 @@ function generatePreview(sheet) {
     els.previewArea.innerHTML = html + '</tbody></table>';
 }
 
-// --- 修正重點 1: handleTemplateChange ---
-// 只自動填入範圍與標題列，不再設定來源名稱規則
 function handleTemplateChange() {
     const key = els.templateSelect.value;
     state.currentTemplate = key;
     const tmpl = TEMPLATE_CONFIG[key];
     
     if (key !== 'custom' && tmpl) {
-        // 1. 僅設定範圍與標題列數
         els.dataRangeInput.value = tmpl.range;
         els.headerRowsInput.value = tmpl.headerRows;
-
-        // 2. 注意：移除了 sourceMode 的自動設定，確保「不套用其他規則」
         showDetectResult(`✅ 已套用版型範圍：${tmpl.name}`, 'success');
         els.autoDetectBtn.style.display = 'none';
         if (state.workbooks.length > 0) {
@@ -391,8 +379,7 @@ function unmergeAndFill(data, sheet, range) {
     return data;
 }
 
-// --- 修正重點 2: loadHeadersAndMapping ---
-// 移除了版型特殊規則，強制使用「自訂模式」的通用邏輯
+// --- 關鍵修正：欄位讀取與防重複命名邏輯 ---
 function loadHeadersAndMapping() {
     const rangeStr = els.dataRangeInput.value.trim().toUpperCase();
     const headerRows = parseInt(els.headerRowsInput.value, 10);
@@ -415,22 +402,41 @@ function loadHeadersAndMapping() {
         let dataRows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: dataRange, defval: null });
         state.originalData = { headers, data: unmergeAndFill(dataRows, sheet, dataRange), range, headerRows, sheet };
         
-        // --- 修正：不再檢查 currentTemplate，一律使用通用邏輯 ---
-        // 第一欄為主鍵，標題為空則忽略，其餘為加總值
+        // --- 新增：重複名稱偵測與重新命名 (Fix for duplicate merged headers) ---
+        const usedNames = new Set();
+        
         state.columnMappings = headers.map((h, i) => {
             const excelCol = XLSX.utils.encode_col(range.s.c + i);
+            let baseName = h || `(空白 ${excelCol})`;
+            let uniqueName = baseName;
+            let counter = 2;
+            
+            // 如果名稱已存在，自動添加後綴 _2, _3 ...
+            while (usedNames.has(uniqueName)) {
+                uniqueName = `${baseName}_${counter}`;
+                counter++;
+            }
+            usedNames.add(uniqueName);
+
             let role = (i === 0) ? 'key' : (!h ? 'ignore' : 'value');
-            return { excelCol, autoHeader: h || `(空白 ${excelCol})`, customName: h || '', role, include: role !== 'ignore' };
+            
+            return { 
+                excelCol, 
+                autoHeader: h || `(空白 ${excelCol})`, // 保留原始顯示
+                customName: uniqueName, // 使用唯一名稱作為 key
+                role, 
+                include: role !== 'ignore' 
+            };
         });
+        // --- 修正結束 ---
 
         state.isTransposed = false;
         els.transposeControls.style.display = 'none';
         els.transposeBtn.textContent = '🔄 欄列轉置';
         renderMappingTable();
         
-        // 提示訊息固定為請確認
         els.mappingAlert.className = 'alert alert-info';
-        els.mappingAlert.innerHTML = '💡 請確認主鍵欄位 (項目/科目) 及要加總的數值欄位。';
+        els.mappingAlert.innerHTML = '💡 請確認主鍵欄位 (項目/科目) 及要加總的數值欄位 (重複欄位已自動編號)。';
         
         document.getElementById('section-mapping').style.display = 'block';
         updateStep(3, 'completed');
@@ -456,7 +462,6 @@ function renderMappingTable() {
     });
     els.mappingFields.innerHTML = html + '</tbody></table></div>';
     
-    // 綁定事件 (簡化寫法)
     els.mappingFields.querySelectorAll('.custom-name-input').forEach(el => el.oninput = e => state.columnMappings[e.target.dataset.idx].customName = e.target.value.trim());
     els.mappingFields.querySelectorAll('.include-checkbox').forEach(el => el.onchange = e => state.columnMappings[e.target.dataset.idx].include = e.target.checked);
     els.mappingFields.querySelectorAll('.role-select').forEach(el => el.onchange = e => {
@@ -468,10 +473,9 @@ function renderMappingTable() {
     els.processBtn.disabled = false;
 }
 
-// 轉置
 function transposeData() {
     if (!state.originalData) return alert('請先讀取欄位');
-    if (state.isTransposed) return loadHeadersAndMapping(); // 還原
+    if (state.isTransposed) return loadHeadersAndMapping(); 
     
     const { headers, range } = state.originalData;
     els.transposeKeySelect.innerHTML = '<option value="">--- 請選擇主鍵 ---</option>' + 
@@ -495,7 +499,6 @@ function applyTranspose() {
             role: 'value', include: true, isTransposeHeader: true 
         };
     }).filter(Boolean);
-    // 第一個設為 key (邏輯上轉置後的 row header) - 實際上是在 processData 處理
     state.columnMappings[0].role = 'key';
     
     state.isTransposed = true;
@@ -566,12 +569,10 @@ function processData() {
             state.allFileData.push({ fileName: wb.file.name, sourceName, fundInfo, data: processed });
         });
 
-        // 彙總與排序
         state.allFileData.forEach(f => f.data.forEach(r => {
             const k = r[keyName];
             if (!state.orderedItemKeys.includes(k)) state.orderedItemKeys.push(k);
             
-            // 加總邏輯 (若轉置，valueCols 是動態的，這裡簡化處理)
             const cols = state.isTransposed ? Object.keys(r).filter(x => ![keyName, '主管別', '業別'].includes(x)) : valCols.map(c => c.customName);
             
             let sum = state.summaryData.get(k) || { [keyName]: k, ...Object.fromEntries(cols.map(c=>[c,0])) };
@@ -579,7 +580,6 @@ function processData() {
             state.summaryData.set(k, sum);
         }));
 
-        // 排序
         const tmpl = TEMPLATE_CONFIG[state.currentTemplate];
         if (tmpl?.sortType && ORDER_LISTS[tmpl.sortType]) {
             const order = new Map(ORDER_LISTS[tmpl.sortType].map((k,i) => [k,i]));
@@ -605,7 +605,6 @@ function renderOutput() {
     const sumData = state.orderedItemKeys.map(k => state.summaryData.get(k));
     document.getElementById('summary-view').innerHTML = `<h3>📊 總表</h3>` + generateHtmlTable(sumData, cols, true);
     
-    // 下拉選單更新
     els.fileDropdown.innerHTML = '<option value="">請選擇檔案</option>' + state.allFileData.map(f => `<option value="${f.fileName}">${f.sourceName}</option>`).join('');
     els.itemDropdown.innerHTML = '<option value="">請選擇項目</option>' + state.orderedItemKeys.map(k => `<option value="${k}">${k}</option>`).join('');
 }
@@ -621,7 +620,6 @@ function generateHtmlTable(data, headers, fmt) {
     return h + '</tbody></table>';
 }
 
-// 檢視與匯出 (簡化版)
 function renderFileDetailView() {
     const f = state.allFileData.find(x => x.fileName === els.fileDropdown.value);
     if(f) els.fileDetailTable.innerHTML = `<h3>${f.sourceName}</h3>` + generateHtmlTable(f.data, [state.exportKeyName, '主管別', '業別', ...state.exportValueColumns], true);
