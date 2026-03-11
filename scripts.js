@@ -436,7 +436,7 @@ function loadHeadersAndMapping() {
         renderMappingTable();
         
         els.mappingAlert.className = 'alert alert-info';
-        els.mappingAlert.innerHTML = '💡 請確認主鍵欄位 (項目/科目) 及要加總的數值欄位 (重複欄位已自動編號)。';
+        els.mappingAlert.innerHTML = '💡 請確認主要分析欄位 (項目/科目) 及要加總的數值欄位 (重複欄位已自動編號)。';
         
         document.getElementById('section-mapping').style.display = 'block';
         updateStep(3, 'completed');
@@ -454,7 +454,7 @@ function renderMappingTable() {
             <td><input type="text" data-idx="${i}" class="custom-name-input" value="${col.customName}"></td>
             <td><select data-idx="${i}" class="role-select">
                 <option value="ignore" ${col.role==='ignore'?'selected':''}>忽略</option>
-                <option value="key" ${col.role==='key'?'selected':''}>主鍵</option>
+                <option value="key" ${col.role==='key'?'selected':''}>分析欄位</option>
                 <option value="value" ${col.role==='value'?'selected':''}>加總</option>
             </select></td>
             <td><input type="checkbox" data-idx="${i}" class="include-checkbox" ${col.include?'checked':''}></td>
@@ -478,11 +478,11 @@ function transposeData() {
     if (state.isTransposed) return loadHeadersAndMapping(); 
     
     const { headers, range } = state.originalData;
-    els.transposeKeySelect.innerHTML = '<option value="">--- 請選擇主鍵 ---</option>' + 
+    els.transposeKeySelect.innerHTML = '<option value="">--- 請選擇分析欄位 ---</option>' + 
         headers.map((h, i) => `<option value="${i}">${h || `欄位 ${i+1}`}</option>`).join('');
     els.transposeControls.style.display = 'flex';
     els.transposeBtn.textContent = '↩️ 還原';
-    alert('✅ 請選擇一個欄位作為轉置後的主鍵');
+    alert('✅ 請選擇一個欄位作為轉置後的分析欄位');
 }
 
 function applyTranspose() {
@@ -516,7 +516,7 @@ function findFundDetails(name) {
 function processData() {
     const keyCol = state.columnMappings.find(c => c.role === 'key' && c.include);
     const valCols = state.columnMappings.filter(c => c.role === 'value' && c.include);
-    if (!keyCol || valCols.length === 0) return alert('設定錯誤：需有一個主鍵與至少一個加總欄位');
+    if (!keyCol || valCols.length === 0) return alert('設定錯誤：需有一個分析欄位與至少一個加總欄位');
     
     const keyName = keyCol.customName || keyCol.autoHeader;
     const useCell = els.sourceNameMode.value === 'cell';
