@@ -51,17 +51,17 @@
                 <div class="form-row" style="margin-bottom: 20px; align-items: center;">
                     <div class="form-group" style="flex: 2;">
                         <label class="form-label">選擇報表版型 (僅帶入範圍設定)</label>
-                        <select id="template-select" style="font-size: 1.1em; padding: 15px; border-color: #667eea; background-color: #f8f9ff;">
+                        <select id="template-select">
                             <option value="custom">🛠️ 自訂/通用模式 (手動設定)</option>
                             </select>
                     </div>
                 </div>
 
-                <div class="form-row template-actions" style="background: #f1f3f9; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; margin-bottom: 20px;">
+                <div class="form-row template-actions panel">
                     <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
-                        <span style="font-weight: 600; color: #555;">⚙️ 版面設定維護：</span>
-                        <button class="btn btn-info" id="export-template-btn" data-icon="📤" style="padding: 8px 16px; font-size: 0.9em;">匯出設定 (JSON)</button>
-                        <button class="btn btn-warning" id="import-template-btn" data-icon="📥" style="padding: 8px 16px; font-size: 0.9em;">匯入設定 (JSON)</button>
+                        <span class="panel-label">⚙️ 版面設定維護：</span>
+                        <button class="btn btn-info" id="export-template-btn" data-icon="📤">匯出設定 (JSON)</button>
+                        <button class="btn btn-warning" id="import-template-btn" data-icon="📥">匯入設定 (JSON)</button>
                         <input type="file" id="template-file-input" accept=".json" style="display: none;">
                     </div>
                 </div>
@@ -87,7 +87,7 @@
                     </div>
                 </div>
                 
-                <div class="form-row" style="background: #f1f3f9; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0;">
+                <div class="form-row panel">
                     <div class="form-group">
                         <label class="form-label">🏷️ 基金/來源名稱抓取方式</label>
                         <select id="source-name-mode">
