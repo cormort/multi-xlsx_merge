@@ -325,22 +325,38 @@ function handleTemplateChange() {
     }
 }
 
-function autoDetectBestRange() {
-    if (state.workbooks.length === 0) return;
-    resetMappings();
-    const sheet = state.workbooks[0].workbook.Sheets[state.workbooks[0].workbook.SheetNames[0]];
-    if (!sheet || !sheet['!ref']) return showDetectResult('工作表為空', 'error');
+// 欄位填充率低於此值視為雜訊欄。實測：真實資料欄 >=55%，雜訊欄 <1%。
+const SPARSE_COL_THRESHOLD = 0.1;
+
+function isNumericCell(v) {
+    if (typeof v === 'number') return true;
+    if (v == null) return false;
+    const s = String(v).replace(/[,\s]/g, '').replace(/^\((.*)\)$/, '-$1');
+    return s !== '' && !isNaN(Number(s));
+}
+
+// 偵測單一工作表的資料範圍，回傳 {range, headerRows} 或 null。
+function detectRangeInSheet(sheet) {
+    if (!sheet || !sheet['!ref']) return null;
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+    const filled = (row, c) => row?.[c] != null && String(row[c]).trim() !== '';
     
     let headerRowIdx = -1, lastDataRowIdx = -1, firstCol = Infinity, lastCol = -1;
     for (let i = 0; i < Math.min(rows.length, 30); i++) {
         if ((rows[i]?.filter(c => c != null && String(c).trim() !== '').length || 0) > 2) { headerRowIdx = i; break; }
     }
-    if (headerRowIdx === -1) return showDetectResult('找不到有效的標頭列', 'error');
+    if (headerRowIdx === -1) return null;
     
     for (let i = rows.length - 1; i > headerRowIdx; i--) {
         if (rows[i] && rows[i].some(c => c != null && String(c).trim() !== '')) { lastDataRowIdx = i; break; }
     }
+    
+    // 表格後方常接著純文字附註區塊，往回收斂到最後一列「含數值」的資料列。
+    // 找不到任何數值列時維持原本結果（整張表可能都是文字）。
+    for (let i = lastDataRowIdx; i > headerRowIdx; i--) {
+        if (rows[i] && rows[i].some(isNumericCell)) { lastDataRowIdx = i; break; }
+    }
+    if (lastDataRowIdx === -1) return null;
     
     for (let r = headerRowIdx; r <= lastDataRowIdx; r++) {
         if (!rows[r]) continue;
@@ -351,18 +367,74 @@ function autoDetectBestRange() {
             }
         });
     }
+    if (lastCol === -1) return null;
     
-    const rangeStr = XLSX.utils.encode_range({ s: { r: headerRowIdx, c: firstCol }, e: { r: lastDataRowIdx, c: lastCol } });
+    // 兩側常有零星雜訊欄（整欄只有一兩格有值），依資料列填充率由外往內收斂。
+    const dataRowCount = lastDataRowIdx - headerRowIdx;
+    if (dataRowCount > 0) {
+        const fillRate = c => {
+            let n = 0;
+            for (let r = headerRowIdx + 1; r <= lastDataRowIdx; r++) if (filled(rows[r], c)) n++;
+            return n / dataRowCount;
+        };
+        while (firstCol < lastCol && fillRate(firstCol) < SPARSE_COL_THRESHOLD) firstCol++;
+        while (lastCol > firstCol && fillRate(lastCol) < SPARSE_COL_THRESHOLD) lastCol--;
+    }
+    
+    // 標頭常跨多列（合併儲存格），自標頭列起算連續「非空白且不含數值」的列數即為標頭列數。
+    let headerRows = 0;
+    for (let r = headerRowIdx; r <= lastDataRowIdx; r++) {
+        const row = rows[r] || [];
+        if (!row.some(c => c != null && String(c).trim() !== '')) break;
+        if (row.some(isNumericCell)) break;
+        headerRows++;
+    }
+    
+    return {
+        range: XLSX.utils.encode_range({ s: { r: headerRowIdx, c: firstCol }, e: { r: lastDataRowIdx, c: lastCol } }),
+        headerRows: Math.max(headerRows, 1),
+    };
+}
+
+function autoDetectBestRange() {
+    if (state.workbooks.length === 0) return;
+    resetMappings();
+    
+    // 本工具的用途是彙整「大量相同版面」的檔案，因此逐檔偵測後取多數決：
+    // 個別檔案旁邊的暫存欄位／手算欄不會影響整批的範圍。
+    const votes = new Map();
+    state.workbooks.forEach(wb => {
+        const result = detectRangeInSheet(wb.workbook.Sheets[wb.workbook.SheetNames[0]]);
+        const key = result ? `${result.range}|${result.headerRows}` : '';
+        if (!votes.has(key)) votes.set(key, []);
+        votes.get(key).push(wb.file.name);
+    });
+    const valid = [...votes].filter(([key]) => key !== '');
+    if (valid.length === 0) return showDetectResult('找不到有效的標頭列', 'error');
+    
+    const [winner, agreed] = valid.sort((a, b) => b[1].length - a[1].length)[0];
+    const [rangeStr, headerRows] = winner.split('|');
     els.dataRangeInput.value = rangeStr;
-    els.headerRowsInput.value = 1;
-    showDetectResult(`成功偵測到範圍：${rangeStr}`, 'success');
+    els.headerRowsInput.value = headerRows;
+    
+    // 使用者匯入前已確認版面相同，因此偵測結果不一致代表有檔案異常
+    // （夾帶了不同報表、圖表工作表、或表格旁有手動加的欄位），逐一點名讓使用者判斷。
+    const odd = [...votes].filter(([key]) => key !== winner).flatMap(([, names]) => names);
+    let message = `成功偵測到範圍：${rangeStr}，標頭 ${headerRows} 列`;
+    if (odd.length > 0) {
+        message += `<br><small>⚠️ ${state.workbooks.length} 個檔案中有 ${odd.length} 個偵測結果不同，`
+            + `已採用多數 (${agreed.length} 個檔案) 的範圍。請確認這些檔案版面是否相同：`
+            + `${odd.join('、')}</small>`;
+    }
+    showDetectResult(message, odd.length > 0 ? 'warning' : 'success');
     document.getElementById('section-range').style.display = 'block';
     updateStep(2, 'completed');
     updateStep(3);
 }
 
 function showDetectResult(message, type) {
-    els.detectResult.innerHTML = `<div class="alert alert-${type === 'success' ? 'success' : 'info'}">${message}</div>`;
+    const cls = ['success', 'warning'].includes(type) ? type : 'info';
+    els.detectResult.innerHTML = `<div class="alert alert-${cls}">${message}</div>`;
 }
 
 function unmergeAndFill(data, sheet, range) {
