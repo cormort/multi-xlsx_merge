@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金資料彙總報告產生器 (v16.1 - 分離版)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <title>基金資料彙總報告產生器 (v16.2)</title>
+    <meta name="description" content="一次彙整多個相同版型的 Excel 工作表：自動偵測資料範圍、欄位對應、加總並匯出 JSON／CSV／HTML／XLSX。全部在瀏覽器本機處理，檔案不會上傳。">
+    <!-- SheetJS：加上 SRI 與 crossorigin，並在載入失敗時給明確訊息（離線或 CDN 掛掉不再只是空白畫面） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+            integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
+            crossorigin="anonymous" referrerpolicy="no-referrer"
+            onerror="document.documentElement.dataset.xlsxFailed='1'"></script>
     <link rel="stylesheet" href="styles.css">
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-GHGBM401HN"></script>
@@ -34,11 +39,12 @@
         <div class="app-content">
             <div class="section" id="section-upload">
                 <h2 class="section-title">上傳 Excel 檔案</h2>
-                <div id="drop-area">
-                    <input type="file" id="file-input" accept=".xlsx,.xls" multiple>
+                <div id="drop-area" role="button" tabindex="0" aria-describedby="drop-hint">
+                    <input type="file" id="file-input" accept=".xlsx,.xls,.xlsm" multiple>
                     <div class="drop-text">拖曳多個 Excel 檔案至此</div>
-                    <div class="drop-hint">或點擊選擇檔案 (支援 .xlsx, .xls)</div>
+                    <div class="drop-hint" id="drop-hint">或點擊此區選擇檔案（支援 .xlsx / .xls；可分批拖入，檔案只在本機瀏覽器處理）</div>
                 </div>
+                <div id="status-area" role="status" aria-live="polite"></div>
                 <div id="file-list-container"></div>
                 <div style="text-align: right; margin-top: 10px;">
                     <button id="clear-btn" class="btn btn-danger-outline" style="display: none;" data-icon="🗑️">清除所有檔案</button>
@@ -63,6 +69,7 @@
                         <button class="btn btn-info" id="export-template-btn" data-icon="📤">匯出設定 (JSON)</button>
                         <button class="btn btn-warning" id="import-template-btn" data-icon="📥">匯入設定 (JSON)</button>
                         <input type="file" id="template-file-input" accept=".json" style="display: none;">
+                    <span class="ref-note">設定檔只含版型／排序／基金名稱對照，不含任何上傳資料。</span>
                     </div>
                 </div>
 
@@ -154,6 +161,20 @@
         </div>
     </div>
     
+    <noscript><div class="alert alert-warning" style="margin:16px;">此工具需要 JavaScript 才能運作。</div></noscript>
+    <div class="app-footer">
+        <span>所有運算都在你的瀏覽器完成，檔案不會上傳到伺服器。</span>
+        <span>本頁使用 Google Analytics 統計使用量（不含檔案內容）。</span>
+    </div>
+
+    <script src="lib.js"></script>
     <script src="scripts.js"></script>
+    <script>
+      // SheetJS 載入失敗時給明確指引，而不是讓使用者面對壞掉的下拉選單。
+      if (document.documentElement.dataset.xlsxFailed) {
+          const area = document.getElementById('status-area');
+          if (area) area.innerHTML = '<div class="alert alert-error">Excel 解析函式庫（SheetJS）載入失敗，請檢查網路連線後重新整理。</div>';
+      }
+    </script>
 </body>
 </html>

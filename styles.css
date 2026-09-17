@@ -309,3 +309,29 @@ input[type="text"]:focus, input[type="number"]:focus, select:focus { outline: no
     .btn { justify-content: center; }
     .export-controls { flex-wrap: wrap; width: 100%; margin-top: 12px; }
 }
+
+/* --- v16.2 新增：狀態列、檔案清單（可個別移除）、響應式表格 --- */
+#status-area:empty { display: none; }
+.app-footer {
+    max-width: 1000px; margin: 24px auto 40px; padding: 0 24px;
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    color: var(--default-500); font-size: 0.8rem;
+}
+.ref-note { color: var(--default-400); font-size: 0.78rem; }
+#drop-area:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+.table-wrapper { overflow-x: auto; }
+.table-wrapper .report-table { min-width: 480px; }
+.file-item .file-name { flex: 2; color: var(--foreground); font-weight: 500; word-break: break-all; }
+.file-item .file-meta { flex: 0 0 auto; color: var(--default-400); font-size: 0.78rem; }
+.file-item .file-badge {
+    flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem;
+    background: var(--default-100); color: var(--default-500);
+}
+.file-item .file-badge.error { background: var(--danger-50); color: var(--danger); }
+.file-item.is-error .file-name { color: var(--danger); }
+.file-item .file-remove {
+    flex: 0 0 auto; margin-left: 10px; border: none; background: transparent;
+    color: var(--default-400); cursor: pointer; font-size: 0.9rem; padding: 4px 6px; border-radius: 6px;
+}
+.file-item .file-remove:hover { background: var(--danger-50); color: var(--danger); }
+.file-item span { flex: 0 1 auto; }
